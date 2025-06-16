@@ -44,17 +44,19 @@ def read_bits(buf, offset, firts_bit, last_bit = None, bits = None):
 proc_fam = None
 proc_model_id = None
 MCHBAR_BASE = None
+DMIBAR_BASE = None
 
 ADL_FAM = [ INTEL_ALDERLAKE, INTEL_ALDERLAKE_L, INTEL_RAPTORLAKE, INTEL_RAPTORLAKE_P, INTEL_RAPTORLAKE_S]
 
-def get_mchbar_info(info, channel):
+def get_mchbar_info(info, controller, channel):
     global proc_model_id, MCHBAR_BASE 
+    MCHBAR_addr = MCHBAR_BASE + (0x10000 * controller)
     tm = { }    
     if proc_model_id in ADL_FAM:
         MC_REGS_OFFSET = 0xE000
         MC_REGS_SIZE = 0x800
-        offset = MC_REGS_OFFSET + MC_REGS_SIZE * channel
-        data = phymem_read(MCHBAR_BASE + offset, MC_REGS_SIZE)
+        offset = MC_REGS_OFFSET + (MC_REGS_SIZE * channel)
+        data = phymem_read(MCHBAR_addr + offset, MC_REGS_SIZE)
         tm["__channel"] = channel
         IMC_CR_TC_ODT = 0x070     # ODT timing parameters
         tm["tCL"] = read_bits(data, IMC_CR_TC_ODT, 16, 22)
@@ -188,19 +190,36 @@ def get_mchbar_info(info, channel):
 
 def get_mem_ctrl(ctrl_num):
     global proc_fam, proc_model_id, MCHBAR_BASE
-    MCHBAR_BASE = pci_cfg_read(0, 0, 0, 0x48, '4')
+    MCHBAR_BASE = pci_cfg_read(0, 0, 0, 0x48, '8')
     if (MCHBAR_BASE & 1) != 1:
         raise RuntimeError(f'ERROR: Readed incorrect MCHBAR_BASE = 0x{MCHBAR_BASE:X}')
     if MCHBAR_BASE < 0xFE000000:
         raise RuntimeError(f'ERROR: Readed incorrect MCHBAR_BASE = 0x{MCHBAR_BASE:X}')
     MCHBAR_BASE = MCHBAR_BASE - 1
     print(f'MCHBAR_BASE = 0x{MCHBAR_BASE:X}')
-    mchbar_mmio = MCHBAR_BASE + 0x6000
+
+    DMIBAR_BASE = pci_cfg_read(0, 0, 0, 0x68, '8')
+    if (DMIBAR_BASE & 1) != 1:
+        raise RuntimeError(f'ERROR: Readed incorrect DMIBAR_BASE = 0x{DMIBAR_BASE:X}')
+    if DMIBAR_BASE < 0xFE000000:
+        raise RuntimeError(f'ERROR: Readed incorrect DMIBAR_BASE = 0x{DMIBAR_BASE:X}')
+    DMIBAR_BASE = DMIBAR_BASE - 1
+    print(f'DMIBAR_BASE = 0x{DMIBAR_BASE:X}')
+
+    DMI_DeviceId = phymem_read(DMIBAR_BASE, 4)
+    DMI_VID = read_bits(DMI_DeviceId, 0, 0, 15)
+    DMI_DID = read_bits(DMI_DeviceId, 0, 16, 31)
+    print(f'DMI_VID = 0x{DMI_VID:X}  DMI_DID = 0x{DMI_DID:X}')
+    if DMI_VID != PCI_VENDOR_ID_INTEL:
+        raise RuntimeError(f'ERROR: Currently support only Intel processors')
+
+    #mchbar_mmio = MCHBAR_BASE + 0x6000
     if proc_model_id < INTEL_ALDERLAKE:
         raise RuntimeError(f'ERROR: Processor model 0x{proc_model_id:X} not supported')
-    MCHBAR_BASE += 0x10000 * ctrl_num
+    
+    MCHBAR_addr = MCHBAR_BASE + (0x10000 * ctrl_num)
     if proc_model_id in ADL_FAM:
-        MADCH = phymem_read(MCHBAR_BASE + 0xD800, 8)
+        MADCH = phymem_read(MCHBAR_addr + 0xD800, 8)
         mi = { }
         mi["DDR_TYPE"]     = read_bits(MADCH, 0, 0, 2)
         mi["CH_L_MAP"]     = read_bits(MADCH, 0, 4, 4)  # Channel L mapping to physical channel.  0 = Channel 0  1 = Channel 1
@@ -221,7 +240,7 @@ def get_mem_ctrl(ctrl_num):
     #print(json.dumps(mi, indent = 4))
     mchan = [ ]
     for cnum in range(0, 2):
-        data = phymem_read(MCHBAR_BASE + 0xD804 + cnum * 4, 4)
+        data = phymem_read(MCHBAR_addr + 0xD804 + cnum * 4, 4)
         if data == b'\xFF\xFF\xFF\xFF':
             raise RuntimeError()
         mc = { }
@@ -230,7 +249,7 @@ def get_mem_ctrl(ctrl_num):
         mc["EIM"] = read_bits(data, 0, 8, 8)
         mc["ECC"] = read_bits(data, 0, 12, 13)
         mc["CRC"] = read_bits(data, 0, 14, 14)   # CRC Mode: 0 = Disabled  1 = Enabled
-        data = phymem_read(MCHBAR_BASE + 0xD80C + cnum * 4, 4)
+        data = phymem_read(MCHBAR_addr + 0xD80C + cnum * 4, 4)
         if data == b'\xFF\xFF\xFF\xFF':
             raise RuntimeError()
         mc["Dimm_L_Size"] = read_bits(data, 0, 0, 6)   # DIMM L Size in 512 MB multiples
@@ -251,7 +270,7 @@ def get_mem_ctrl(ctrl_num):
     memory['info'] = mi
     memory['channels'] = mchan
     for channel in range(0, 2):    
-        mchan[channel]['info'] = get_mchbar_info(mi, channel)
+        mchan[channel]['info'] = get_mchbar_info(mi, ctrl_num, channel)
     return memory
 
 def get_mem_info():
