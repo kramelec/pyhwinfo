@@ -123,8 +123,8 @@ def get_mchbar_info(info, controller, channel):
         tm["WCKDIFFLOWINIDLE"] = read_bits(data, IMC_SC_GS_CFG, 54, 54)
         tm["tCPDED"] = read_bits(data, IMC_SC_GS_CFG, 56, 60)
         
-        tm["tRDRD_sg"] = read_bits(data, 0x00C, 0, 6)
         tm["ALLOW_2CYC_B2B_LPDDR"] = read_bits(data, 0x00C, 7, 7)
+        tm["tRDRD_sg"] = read_bits(data, 0x00C, 0, 6)
         tm["tRDRD_dg"] = read_bits(data, 0x00C, 8, 14)
         tm["tRDRD_dr"] = read_bits(data, 0x00C, 16, 23)
         tm["tRDRD_dd"] = read_bits(data, 0x00C, 24, 31)
@@ -167,8 +167,8 @@ def get_mchbar_info(info, controller, channel):
         else:
             tWR_quantity = 8  # DDR5 and LPDDR5
 
-        if tm['tWRPRE'] > tm['tCWL'] + tWR_quantity:
-            tm['tWR'] = tm['tWRPRE'] - tm['tCWL'] - tWR_quantity
+        #if tm['tWRPRE'] > tm['tCWL'] + tWR_quantity:
+        tm['tWR'] = tm['tWRPRE'] - tm['tCWL'] - tWR_quantity
 
         if tm['GEAR4']:
             tm['GEAR'] = 4
@@ -258,6 +258,9 @@ def get_mem_info():
     if proc_fam != 6:
         raise RuntimeError(f'ERROR: Currently support only Intel processors')
 
+    if proc_model_id < INTEL_ALDERLAKE:
+        raise RuntimeError(f'ERROR: Processor model 0x{proc_model_id:X} not supported')
+
     MCHBAR_BASE = pci_cfg_read(0, 0, 0, 0x48, '8')
     if (MCHBAR_BASE & 1) != 1:
         raise RuntimeError(f'ERROR: Readed incorrect MCHBAR_BASE = 0x{MCHBAR_BASE:X}')
@@ -282,10 +285,35 @@ def get_mem_info():
         raise RuntimeError(f'ERROR: Currently support only Intel processors')
 
     #mchbar_mmio = MCHBAR_BASE + 0x6000
-    if proc_model_id < INTEL_ALDERLAKE:
-        raise RuntimeError(f'ERROR: Processor model 0x{proc_model_id:X} not supported')
 
     gdict = { }
+    gdict['processor'] = { }
+    proc = gdict['processor']
+
+    CAP_A = pci_cfg_read(0, 0, 0, 0xE4, 8)  # Capabilities A. Processor capability enumeration.
+    proc['NVME_F7D'] = read_bits(CAP_A, 0, 1, 1)
+    proc['DDR_OVERCLOCK'] = read_bits(CAP_A, 0, 3, 3)
+    proc['CRID'] = read_bits(CAP_A, 0, 4, 7)
+    proc['2LM_SUPPORTED'] = read_bits(CAP_A, 0, 8, 8)
+    proc['DID0OE'] = read_bits(CAP_A, 0, 10, 10)
+    proc['IntGpu'] = True if read_bits(CAP_A, 0, 11, 11) == 0 else False     # IGD: Internal Graphics Status
+    proc['DualMemChan'] = True if read_bits(CAP_A, 0, 12, 12) == 0 else False  # PDCD: Dual Memory Channel Support
+    proc['X2APIC_EN'] = read_bits(CAP_A, 0, 13, 13)
+    proc['TwoDimmPerChan'] = True if read_bits(CAP_A, 0, 14, 14) == 0 else False   # DDPCD: 2 DIMMs Per Channel Status
+    proc['DTT_dev'] = True if read_bits(CAP_A, 0, 15, 15) == 0 else False     # CDD: DTT Device Status
+    proc['D1NM'] = True if read_bits(CAP_A, 0, 17, 17) == 0 else False       # DRAM 1N Timing Status
+    proc['PEG60'] = True if read_bits(CAP_A, 0, 18, 18) == 0 else False      # PEG60D: PCIe Controller Device 6 Function 0 Status
+    proc['DDRSZ'] = read_bits(CAP_A, 0, 19, 20)  # DRAM Maximum Size per Channel
+    DRAM_SIZE_map = { 0: None, 1: '8GB', 2: '4GB', 3: '2GB' }
+    proc['DDRSZ_max'] = DRAM_SIZE_map[proc['DDRSZ']]
+    proc['DMIG2'] = True if read_bits(CAP_A, 0, 22, 22) == 0 else False  # DMIG2DIS: DMI GEN2 Status
+    proc['VTD'] = True if read_bits(CAP_A, 0, 23, 23) == 0 else False  # VTDD:  VT-d status
+    proc['FDEE'] = read_bits(CAP_A, 0, 24, 24)  # Force DRAM ECC Enable
+    proc['ECC'] = True if read_bits(CAP_A, 0, 25, 25) == 0 else False  # ECCDIS : DRAM ECC status
+    proc['DW'] = 'x4' if read_bits(CAP_A, 0, 26, 26) == 0 else 'x2'   # DMI Width
+    proc['PELWU'] = True if read_bits(CAP_A, 0, 27, 27) == 0 else False  # PELWUD : PCIe Link Width Up-config
+    #proc['xxxxx'] = read_bits(CAP_A, 0, 0, 0)    
+
     gdict['memory'] = { }
     mi = gdict['memory']
 
@@ -352,7 +380,8 @@ def get_mem_info():
     bios['REQ_VDDQ_TX_ICCMAX'] = round(read_bits(data, 0, 27, 30) * 0.25, 3)  # Described in 0.25A resolution. IccMax: 32 * 0.25 = 8A
     bios['RUN_BUSY'] = read_bits(data, 0, 31, 31)
 
-    bios = mi['BIOS_DATA'] = { }
+    #bios = mi['BIOS_DATA'] = { }
+    bios = mi
     data = phymem_read(MCHBAR_BASE + 0x5E04, 4)   # Memory Controller BIOS Data
     MC_PLL_RATIO = read_bits(data, 0, 0, 7) # This field holds the memory controller frequency (QCLK).
     bios['MC_PLL_REF'] = read_bits(data, 0, 8, 11)
@@ -377,10 +406,10 @@ def get_mem_info():
     
     # BCLKOCRANGE
 
-    IMC = gdict['memory']['IMC'] = [ ]
+    mc = gdict['memory']['mc'] = [ ]
     for ctrl_num in range(0, 2):
         mem = get_mem_ctrl(ctrl_num)
-        IMC.append( mem )
+        mc.append( mem )
     return gdict
 
 if __name__ == "__main__":
