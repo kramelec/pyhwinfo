@@ -45,11 +45,12 @@ proc_fam = None
 proc_model_id = None
 MCHBAR_BASE = None
 DMIBAR_BASE = None
+gdict = { }
 
 ADL_FAM = [ INTEL_ALDERLAKE, INTEL_ALDERLAKE_L, INTEL_RAPTORLAKE, INTEL_RAPTORLAKE_P, INTEL_RAPTORLAKE_S]
 
 def get_mchbar_info(info, controller, channel):
-    global proc_model_id, MCHBAR_BASE 
+    global gdict, proc_model_id, MCHBAR_BASE 
     MCHBAR_addr = MCHBAR_BASE + (0x10000 * controller)
     tm = { }    
     if proc_model_id in ADL_FAM:
@@ -189,34 +190,8 @@ def get_mchbar_info(info, controller, channel):
     return tm
 
 def get_mem_ctrl(ctrl_num):
-    global proc_fam, proc_model_id, MCHBAR_BASE
-    MCHBAR_BASE = pci_cfg_read(0, 0, 0, 0x48, '8')
-    if (MCHBAR_BASE & 1) != 1:
-        raise RuntimeError(f'ERROR: Readed incorrect MCHBAR_BASE = 0x{MCHBAR_BASE:X}')
-    if MCHBAR_BASE < 0xFE000000:
-        raise RuntimeError(f'ERROR: Readed incorrect MCHBAR_BASE = 0x{MCHBAR_BASE:X}')
-    MCHBAR_BASE = MCHBAR_BASE - 1
-    print(f'MCHBAR_BASE = 0x{MCHBAR_BASE:X}')
-
-    DMIBAR_BASE = pci_cfg_read(0, 0, 0, 0x68, '8')
-    if (DMIBAR_BASE & 1) != 1:
-        raise RuntimeError(f'ERROR: Readed incorrect DMIBAR_BASE = 0x{DMIBAR_BASE:X}')
-    if DMIBAR_BASE < 0xFE000000:
-        raise RuntimeError(f'ERROR: Readed incorrect DMIBAR_BASE = 0x{DMIBAR_BASE:X}')
-    DMIBAR_BASE = DMIBAR_BASE - 1
-    print(f'DMIBAR_BASE = 0x{DMIBAR_BASE:X}')
-
-    DMI_DeviceId = phymem_read(DMIBAR_BASE, 4)
-    DMI_VID = read_bits(DMI_DeviceId, 0, 0, 15)
-    DMI_DID = read_bits(DMI_DeviceId, 0, 16, 31)
-    print(f'DMI_VID = 0x{DMI_VID:X}  DMI_DID = 0x{DMI_DID:X}')
-    if DMI_VID != PCI_VENDOR_ID_INTEL:
-        raise RuntimeError(f'ERROR: Currently support only Intel processors')
-
-    #mchbar_mmio = MCHBAR_BASE + 0x6000
-    if proc_model_id < INTEL_ALDERLAKE:
-        raise RuntimeError(f'ERROR: Processor model 0x{proc_model_id:X} not supported')
-    
+    global gdict, proc_fam, proc_model_id, MCHBAR_BASE
+   
     MCHBAR_addr = MCHBAR_BASE + (0x10000 * ctrl_num)
     if proc_model_id in ADL_FAM:
         MADCH = phymem_read(MCHBAR_addr + 0xD800, 8)
@@ -274,7 +249,7 @@ def get_mem_ctrl(ctrl_num):
     return memory
 
 def get_mem_info():
-    global proc_fam, proc_model_id, MCHBAR_BASE
+    global gdict, proc_fam, proc_model_id, MCHBAR_BASE, DMIBAR_BASE
     print('Processor Specification:', GetProcessorSpecification())
     proc_fam = GetProcessorFamily()
     print('Processor Family: 0x%X' % proc_fam)
@@ -282,11 +257,131 @@ def get_mem_info():
     print('Processor Model ID: 0x%X' % proc_model_id)    
     if proc_fam != 6:
         raise RuntimeError(f'ERROR: Currently support only Intel processors')
-    memory = [ ]
+
+    MCHBAR_BASE = pci_cfg_read(0, 0, 0, 0x48, '8')
+    if (MCHBAR_BASE & 1) != 1:
+        raise RuntimeError(f'ERROR: Readed incorrect MCHBAR_BASE = 0x{MCHBAR_BASE:X}')
+    if MCHBAR_BASE < 0xFE000000:
+        raise RuntimeError(f'ERROR: Readed incorrect MCHBAR_BASE = 0x{MCHBAR_BASE:X}')
+    MCHBAR_BASE = MCHBAR_BASE - 1
+    print(f'MCHBAR_BASE = 0x{MCHBAR_BASE:X}')
+
+    DMIBAR_BASE = pci_cfg_read(0, 0, 0, 0x68, '8')
+    if (DMIBAR_BASE & 1) != 1:
+        raise RuntimeError(f'ERROR: Readed incorrect DMIBAR_BASE = 0x{DMIBAR_BASE:X}')
+    if DMIBAR_BASE < 0xFE000000:
+        raise RuntimeError(f'ERROR: Readed incorrect DMIBAR_BASE = 0x{DMIBAR_BASE:X}')
+    DMIBAR_BASE = DMIBAR_BASE - 1
+    print(f'DMIBAR_BASE = 0x{DMIBAR_BASE:X}')
+
+    DMI_DeviceId = phymem_read(DMIBAR_BASE, 4)
+    DMI_VID = read_bits(DMI_DeviceId, 0, 0, 15)
+    DMI_DID = read_bits(DMI_DeviceId, 0, 16, 31)
+    print(f'DMI_VID = 0x{DMI_VID:X}  DMI_DID = 0x{DMI_DID:X}')
+    if DMI_VID != PCI_VENDOR_ID_INTEL:
+        raise RuntimeError(f'ERROR: Currently support only Intel processors')
+
+    #mchbar_mmio = MCHBAR_BASE + 0x6000
+    if proc_model_id < INTEL_ALDERLAKE:
+        raise RuntimeError(f'ERROR: Processor model 0x{proc_model_id:X} not supported')
+
+    gdict = { }
+    gdict['memory'] = { }
+    mi = gdict['memory']
+
+    data = phymem_read(MCHBAR_BASE + 0x5F58, 8)
+    mi['MC_TIMING_RUNTIME_OC_ENABLED'] = read_bits(data, 0, 0, 0)  # Adjusting memory timing values for overclocking is enabled
+    data = phymem_read(MCHBAR_BASE + 0x5F60, 8)
+    BCLK_FREQ = read_bits(data, 0, 0, 31) / 1000.0  # Reported BCLK Frequency in KHz
+    mi['BCLK_FREQ'] = round(BCLK_FREQ, 3)
+
+    pw = mi['POWER'] = { }
+    data = phymem_read(MCHBAR_BASE + 0x58E0, 8)   # DDR Power Limit
+    pw['LIMIT1_POWER'] = read_bits(data, 0, 0, 14) / 100 # Power Limit 1 (PL1) for DDR domain in Watts. Format is U11.3: Resolution 0.125W, Range 0-2047.875W
+    pw['LIMIT1_ENABLE'] = read_bits(data, 0, 15, 15)  # Power Limit 1 (PL1) enable bit for DDR domain
+    pw['LIMIT1_TIME_WINDOW_Y'] = read_bits(data, 0, 17, 21)  # Power Limit 1 (PL1) time window Y value, for DDR domain. Actual time window for RAPL is: (1/1024 seconds) * (1+(X/4)) * (2Y)
+    pw['LIMIT1_TIME_WINDOW_X'] = read_bits(data, 0, 22, 23)  # Power Limit 1 (PL1) time window X value, for DDR domain. Actual time window for RAPL is: (1/1024 seconds) * (1+(X/4)) * (2Y) 
+    pw['LIMIT2_POWER'] = read_bits(data, 0, 32, 46) / 100 # Power Limit 2 (PL2) for DDR domain in Watts. Format is U11.3: Resolution 0.125W, Range 0-2047.875W.
+    pw['LIMIT2_ENABLE'] = read_bits(data, 0, 47, 47)  # Power Limit 2 (PL2) enable bit for DDR domain.
+    pw['limits_LOCKED'] = read_bits(data, 0, 63, 63)  # When set, this entire register becomes read-only. This bit will typically be set by BIOS during boot.
+    data = phymem_read(MCHBAR_BASE + 0x58F0, 4)   # Package RAPL Performance Status
+    pw['RAPL_COUNTS'] = read_bits(data, 0, 0, 31)
+    data = phymem_read(MCHBAR_BASE + 0x5920, 4)   # Primary Plane Turbo Policy
+    pw['PRIPTP'] = read_bits(data, 0, 0, 4)  # Priority Level. A higher number implies a higher priority.
+    data = phymem_read(MCHBAR_BASE + 0x5924, 4)   # Secondary Plane Turbo Policy
+    pw['SECPTP'] = read_bits(data, 0, 0, 4)  # Priority Level. A higher number implies a higher priority.
+    data = phymem_read(MCHBAR_BASE + 0x5928, 4)   # Primary Plane Energy Status
+    pw['PRI_DATA'] = read_bits(data, 0, 0, 31)  # Energy Value. The value of this register is updated every 1mSec.
+    data = phymem_read(MCHBAR_BASE + 0x592C, 4)   # Primary Plane Energy Status
+    pw['SEC_DATA'] = read_bits(data, 0, 0, 31)  # Energy Value. The value of this register is updated every 1mSec.
+    data = phymem_read(MCHBAR_BASE + 0x5938, 4)   # Package Power SKU Unit
+    pw['PWR_UNIT'] = read_bits(data, 0, 0, 3)  # Power Units used for power control registers. The actual unit value is calculated by 1 W / Power(2, PWR_UNIT). The default value of 0011b corresponds to 1/8 W.
+    pw['ENERGY_UNIT'] = read_bits(data, 0, 8, 12)
+    pw['TIME_UNIT'] = read_bits(data, 0, 16, 19)
+    data = phymem_read(MCHBAR_BASE + 0x593C, 4)   # Package Energy Status
+    pw['PKG_ENG_STATUS'] = read_bits(data, 0, 0, 31)  # Package energy consumed by the entire CPU (including IA, GT and uncore). The counter will wrap around and continue counting when it reaches its limit.
+
+    sa = mi['SA'] = { }
+    data = phymem_read(MCHBAR_BASE + 0x5918, 8)   # System Agent Performance Status
+    sa['LAST_DE_WP_REQ_SERVED'] = read_bits(data, 0, 0, 1)   # Last display engine workpoint request served by the PCU
+    sa['QCLK_REFERENCE'] = read_bits(data, 0, 10, 10)  # 0 = 133.34Mhz  1 = 100 MHz
+    sa['QCLK_RATIO'] = read_bits(data, 0, 2, 9)  # Reference clock is determined by the QCLK_REFERENCE field.
+    sa['QCLK'] = round(sa['QCLK_RATIO'] * mi['BCLK_FREQ'], 3)
+    if sa['QCLK_REFERENCE'] == 0:
+        sa['QCLK'] = round(sa['QCLK'] * 1.33, 3)
+    sa['OPI_LINK_SPEED'] = read_bits(data, 0, 11, 11)  # 0: 2Gb/s    1: 4Gb/s
+    sa['IPU_IS_DIVISOR'] = read_bits(data, 0, 12, 17)  # The frequency is 1600MHz/Divisor 
+    sa['IPU_IS_freq'] = 1600 / sa['IPU_IS_DIVISOR'] if sa['IPU_IS_DIVISOR'] > 0 else None
+    sa['IPU_PS_RATIO'] = read_bits(data, 0, 18, 23)  # IPU PS RATIO. The frequency is 25MHz * Ratio.
+    sa['IPU_PS_freq'] = 25.0 * sa['IPU_PS_RATIO']
+    sa['UCLK_RATIO'] = read_bits(data, 0, 24, 31)  # Used to calculate the ring's frequency. Ring Frequency = UCLK_RATIO * BCLK
+    sa['UCLK'] = round(sa['UCLK_RATIO'] * mi['BCLK_FREQ'], 3)
+    sa['PSF0_RATIO'] = read_bits(data, 0, 32, 39)  # Reports the PSF0 PLL ratio. The PSF0 frequency is: Ratio * 16.67MHz.
+    sa['PSF0_freq'] = round(16.67 * sa['PSF0_RATIO'], 3)
+    sa['SA_VOLTAGE'] = read_bits(data, 0, 40, 55)  # Reports the System Agent voltage in u3.13 format. Conversion to Volts: V = SA_VOLTAGE / 8192.0
+    sa['SA_VOLTAGE'] = round(sa['SA_VOLTAGE'] / 8192, 3)
+
+    bios = mi['BIOS_REQUEST'] = { }
+    data = phymem_read(MCHBAR_BASE + 0x5E00, 4)   # Memory Controller BIOS Request
+    MC_PLL_RATIO = read_bits(data, 0, 0, 7) # This field holds the memory controller frequency (QCLK).
+    bios['MC_PLL_REF'] = read_bits(data, 0, 8, 11)
+    bios['MC_PLL_RATIO'] = MC_PLL_RATIO
+    bios['MC_PLL_freq'] = MC_PLL_RATIO * 100.0 if bios['MC_PLL_REF'] == 1 else round(MC_PLL_RATIO * 133.33, 3)
+    bios['GEAR'] = 1 << read_bits(data, 0, 12, 13)
+    bios['REQ_VDDQ_TX_VOLTAGE'] = round(read_bits(data, 0, 17, 26) * 5 / 1000, 3) # Voltage of the VDDQ TX rail at this clock frequency and gear configuration. Described in 5mV resolution
+    bios['REQ_VDDQ_TX_ICCMAX'] = round(read_bits(data, 0, 27, 30) * 0.25, 3)  # Described in 0.25A resolution. IccMax: 32 * 0.25 = 8A
+    bios['RUN_BUSY'] = read_bits(data, 0, 31, 31)
+
+    bios = mi['BIOS_DATA'] = { }
+    data = phymem_read(MCHBAR_BASE + 0x5E04, 4)   # Memory Controller BIOS Data
+    MC_PLL_RATIO = read_bits(data, 0, 0, 7) # This field holds the memory controller frequency (QCLK).
+    bios['MC_PLL_REF'] = read_bits(data, 0, 8, 11)
+    bios['MC_PLL_RATIO'] = MC_PLL_RATIO
+    bios['MC_PLL_freq'] = MC_PLL_RATIO * 100.0 if bios['MC_PLL_REF'] == 1 else round(MC_PLL_RATIO * 133.33, 3)
+    bios['GEAR'] = 1 << read_bits(data, 0, 12, 13)
+    bios['REQ_VDDQ_TX_VOLTAGE'] = round(read_bits(data, 0, 17, 26) * 5 / 1000, 3) # Voltage of the VDDQ TX rail at this clock frequency and gear configuration. Described in 5mV resolution
+    bios['REQ_VDDQ_TX_ICCMAX'] = round(read_bits(data, 0, 27, 30) * 0.25, 3)  # Described in 0.25A resolution. IccMax: 32 * 0.25 = 8A
+
+    data = phymem_read(MCHBAR_BASE + 0x5F00, 4)   # System Agent Power Management Control
+    mi['SACG_ENA'] = read_bits(data, 0, 0, 0)  # This bit is used to enable or disable the System Agent Clock Gating (FCLK) : 0 = Not Allow , 1 = Allow
+    mi['MPLL_OFF_ENA'] = read_bits(data, 0, 1, 1)  # This bit is used to enable shutting down the Memory Controller PLLs (MCPLL and GDPLL).   0b: PLL shutdown is not allowed   1b: PLL shutdown is allowed
+    mi['PPLL_OFF_ENA'] = read_bits(data, 0, 2, 2)  # This bit is used to enable shutting down the PCIe/DMI PLL
+    mi['SACG_SEN'] = read_bits(data, 0, 8, 8)  # This bit indicates when the System Agent clock gating is possible based on link active power states.
+    mi['MPLL_OFF_SEN'] = read_bits(data, 0, 9, 9) # This bit indicates when the Memory PLLs (MCPLL and GDPLL) may be shutdown based on link active power states.
+    mi['MDLL_OFF_SEN'] = read_bits(data, 0, 10, 10) # This bit indicates when the Memory Master DLL may be shutdown based on link active power states.
+    mi['SACG_SREXIT'] = read_bits(data, 0, 11, 11)  # The Display Engine can indicate to the PCU that it wants the Memory Controller to exit self-refresh
+    mi['NSWAKE_SREXIT'] = read_bits(data, 0, 12, 12)  # When this bit is set to 1b, a Non-Snoop wakeup signal from the PCH will cause the PCU to force the memory controller to exit from Self-Refresh
+    mi['SACG_MPLL'] = read_bits(data, 0, 13, 13)  # When this bit is set to 1b, FCLK will never be gated when the memory controller PLL is ON.
+    mi['MPLL_ON_DE'] = read_bits(data, 0, 14, 14)
+    mi['MDLL_ON_DE'] = read_bits(data, 0, 15, 15)
+    
+    # BCLKOCRANGE
+
+    IMC = gdict['memory']['IMC'] = [ ]
     for ctrl_num in range(0, 2):
         mem = get_mem_ctrl(ctrl_num)
-        memory.append( mem )
-    return memory
+        IMC.append( mem )
+    return gdict
 
 if __name__ == "__main__":
     SdkInit(None, 0)
