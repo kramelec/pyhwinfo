@@ -30,8 +30,8 @@ def read_bits(buf, offset, firts_bit, last_bit = None, bits = None):
     if offset is None:
         offset = 0
     if last_bit is None and bits is None:
-        raise ValueError()
-    if last_bit is None:
+        last_bit = firts_bit
+    if last_bit is None and isinstance(bits, int):
         last_bit = firts_bit + bits - 1
     if last_bit < firts_bit:
         raise ValueError()
@@ -287,32 +287,76 @@ def get_mem_info():
     #mchbar_mmio = MCHBAR_BASE + 0x6000
 
     gdict = { }
-    gdict['processor'] = { }
-    proc = gdict['processor']
+    gdict['CAP'] = { }
+    cap = gdict['CAP']
 
-    CAP_A = pci_cfg_read(0, 0, 0, 0xE4, 8)  # Capabilities A. Processor capability enumeration.
-    proc['NVME_F7D'] = read_bits(CAP_A, 0, 1, 1)
-    proc['DDR_OVERCLOCK'] = read_bits(CAP_A, 0, 3, 3)
-    proc['CRID'] = read_bits(CAP_A, 0, 4, 7)
-    proc['2LM_SUPPORTED'] = read_bits(CAP_A, 0, 8, 8)
-    proc['DID0OE'] = read_bits(CAP_A, 0, 10, 10)
-    proc['IntGpu'] = True if read_bits(CAP_A, 0, 11, 11) == 0 else False     # IGD: Internal Graphics Status
-    proc['DualMemChan'] = True if read_bits(CAP_A, 0, 12, 12) == 0 else False  # PDCD: Dual Memory Channel Support
-    proc['X2APIC_EN'] = read_bits(CAP_A, 0, 13, 13)
-    proc['TwoDimmPerChan'] = True if read_bits(CAP_A, 0, 14, 14) == 0 else False   # DDPCD: 2 DIMMs Per Channel Status
-    proc['DTT_dev'] = True if read_bits(CAP_A, 0, 15, 15) == 0 else False     # CDD: DTT Device Status
-    proc['D1NM'] = True if read_bits(CAP_A, 0, 17, 17) == 0 else False       # DRAM 1N Timing Status
-    proc['PEG60'] = True if read_bits(CAP_A, 0, 18, 18) == 0 else False      # PEG60D: PCIe Controller Device 6 Function 0 Status
-    proc['DDRSZ'] = read_bits(CAP_A, 0, 19, 20)  # DRAM Maximum Size per Channel
+    CAP_A = pci_cfg_read(0, 0, 0, 0xE4, 4)  # Capabilities A. Processor capability enumeration.
+    cap['NVME_F7D'] = read_bits(CAP_A, 0, 1, 1)
+    cap['DDR_OVERCLOCK'] = read_bits(CAP_A, 0, 3, 3)
+    cap['CRID'] = read_bits(CAP_A, 0, 4, 7)
+    cap['2LM_SUPPORTED'] = read_bits(CAP_A, 0, 8, 8)
+    cap['DID0OE'] = read_bits(CAP_A, 0, 10, 10)
+    cap['IntGpu'] = True if read_bits(CAP_A, 0, 11, 11) == 0 else False     # IGD: Internal Graphics Status
+    cap['DualMemChan'] = True if read_bits(CAP_A, 0, 12, 12) == 0 else False  # PDCD: Dual Memory Channel Support
+    cap['X2APIC_EN'] = read_bits(CAP_A, 0, 13, 13)
+    cap['TwoDimmPerChan'] = True if read_bits(CAP_A, 0, 14, 14) == 0 else False   # DDPCD: 2 DIMMs Per Channel Status
+    cap['DTT_dev'] = True if read_bits(CAP_A, 0, 15, 15) == 0 else False     # CDD: DTT Device Status
+    cap['D1NM'] = True if read_bits(CAP_A, 0, 17, 17) == 0 else False       # DRAM 1N Timing Status
+    cap['PEG60'] = True if read_bits(CAP_A, 0, 18, 18) == 0 else False      # PEG60D: PCIe Controller Device 6 Function 0 Status
+    cap['DDRSZ'] = read_bits(CAP_A, 0, 19, 20)  # DRAM Maximum Size per Channel
     DRAM_SIZE_map = { 0: None, 1: '8GB', 2: '4GB', 3: '2GB' }
-    proc['DDRSZ_max'] = DRAM_SIZE_map[proc['DDRSZ']]
-    proc['DMIG2'] = True if read_bits(CAP_A, 0, 22, 22) == 0 else False  # DMIG2DIS: DMI GEN2 Status
-    proc['VTD'] = True if read_bits(CAP_A, 0, 23, 23) == 0 else False  # VTDD:  VT-d status
-    proc['FDEE'] = read_bits(CAP_A, 0, 24, 24)  # Force DRAM ECC Enable
-    proc['ECC'] = True if read_bits(CAP_A, 0, 25, 25) == 0 else False  # ECCDIS : DRAM ECC status
-    proc['DW'] = 'x4' if read_bits(CAP_A, 0, 26, 26) == 0 else 'x2'   # DMI Width
-    proc['PELWU'] = True if read_bits(CAP_A, 0, 27, 27) == 0 else False  # PELWUD : PCIe Link Width Up-config
-    #proc['xxxxx'] = read_bits(CAP_A, 0, 0, 0)    
+    cap['DDRSZ_max'] = DRAM_SIZE_map[cap['DDRSZ']]
+    cap['DMIG2'] = True if read_bits(CAP_A, 0, 22, 22) == 0 else False  # DMIG2DIS: DMI GEN2 Status
+    cap['VTD'] = True if read_bits(CAP_A, 0, 23, 23) == 0 else False  # VTDD:  VT-d status
+    cap['FDEE'] = read_bits(CAP_A, 0, 24, 24)  # Force DRAM ECC Enable
+    cap['ECC'] = True if read_bits(CAP_A, 0, 25, 25) == 0 else False  # ECCDIS : DRAM ECC status
+    cap['DW'] = 'x4' if read_bits(CAP_A, 0, 26, 26) == 0 else 'x2'   # DMI Width
+    cap['PELWU'] = True if read_bits(CAP_A, 0, 27, 27) == 0 else False  # PELWUD : PCIe Link Width Up-config
+    CAP_B = pci_cfg_read(0, 0, 0, 0xE8, 4)  # Capabilities B. Processor capability enumeration.
+    cap['SPEGFX1'] = read_bits(CAP_B, 0, 0)    
+    cap['DPEGFX1'] = read_bits(CAP_B, 0, 1)    
+    cap['VMD'] = True if read_bits(CAP_B, 0, 2) == 0 else False    # VMD_DIS
+    cap['SH_OPI_EN'] = read_bits(CAP_B, 0, 3)    
+    cap['Debug'] = True if read_bits(CAP_B, 0, 7) == 0 else False   # Debug mode status
+    cap['GNA'] = True if read_bits(CAP_B, 0, 8) == 0 else False     # GNA_DIS
+    cap['DEV10'] = True if read_bits(CAP_B, 0, 10) == 0 else False    # DEV10_DISABLED
+    cap['HDCP'] = True if read_bits(CAP_B, 0, 11) == 0 else False     # HDCPD
+    cap['LTECH'] = read_bits(CAP_B, 0, 12, 14)    
+    cap['DMIG3'] = True if read_bits(CAP_B, 0, 15) == 0 else False   # DMIG3DIS 
+    cap['PEGX16'] = True if read_bits(CAP_B, 0, 16) == 0 else False    # PEGX16D
+    cap['PKGTYP'] = read_bits(CAP_B, 0, 19)    
+    cap['PEGG3'] = True if read_bits(CAP_B, 0, 20) == 0 else False    # PEGG3_DIS
+    cap['PLL_REF100_CFG'] = read_bits(CAP_B, 0, 21, 23)  # DDR Maximum Frequency Capability with 100MHz memory reference clock (ref_clk). 0: 100 MHz memory reference clock is not supported / 1-6: Reserved / 7: Unlimited
+    cap['SVM'] = True if read_bits(CAP_B, 0, 24) == 0 else False  # SVM_DISABLE  
+    cap['CACHESZ'] = read_bits(CAP_B, 0, 25, 27)    
+    cap['SMT'] = read_bits(CAP_B, 0, 28)    
+    cap['OC_ENABLED'] = read_bits(CAP_B, 0, 29)   # Overclocking Enabled 
+    cap['TRACE_HUB'] = True if read_bits(CAP_B, 0, 30) == 0 else False   # TRACE_HUB_DIS 
+    cap['IPU'] = True if read_bits(CAP_B, 0, 31) == 0 else False   # IPU_DIS  
+    CAP_C = pci_cfg_read(0, 0, 0, 0xEC, 4)  # Capabilities C. Processor capability enumeration.
+    cap['DISPLAY_PIPE3'] = read_bits(CAP_C, 0, 5)
+    cap['IDD'] = read_bits(CAP_C, 0, 6)
+    cap['BCLKOCRANGE'] = read_bits(CAP_C, 0, 7, 8)  # BCLK Overclocking maximum frequency
+    BCLK_OC_map = { 0: 'disabled', 1: 'max=115MHz', 2: 'max=130MHz', 3: 'unlimited' }
+    cap['BCLKOC_freq_limit'] = BCLK_OC_map[cap['BCLKOCRANGE']]
+    cap['QCLK_GV'] = True if read_bits(CAP_C, 0, 14) == 0 else False   # QCLK_GV_DIS
+    cap['LPDDR4_EN'] = read_bits(CAP_C, 0, 16)
+    cap['MAX_DATA_RATE_LPDDR4'] = read_bits(CAP_C, 0, 17, 21)
+    cap['DDR4_EN'] = read_bits(CAP_C, 0, 22)
+    cap['MAX_DATA_RATE_DDR4'] = read_bits(CAP_C, 0, 23, 27)
+    cap['PEGG4'] = True if read_bits(CAP_C, 0, 28) == 0 else False   # PEGG4_DIS
+    cap['PEGG5'] = True if read_bits(CAP_C, 0, 29) == 0 else False   # PEGG5_DIS
+    cap['PEG61'] = True if read_bits(CAP_C, 0, 30) == 0 else False   # PEG61D
+    CAP_E = pci_cfg_read(0, 0, 0, 0xF0, 4)  # Capabilities E. Processor capability enumeration.
+    cap['LPDDR5_EN'] = read_bits(CAP_E, 0, 0)
+    cap['MAX_DATA_RATE_LPDDR5'] = read_bits(CAP_E, 0, 1, 5)
+    cap['MAX_DATA_FREQ_LPDDR5'] = cap['MAX_DATA_RATE_LPDDR5'] * 266
+    cap['DDR5_EN'] = read_bits(CAP_E, 0, 6)
+    cap['MAX_DATA_RATE_DDR5'] = read_bits(CAP_E, 0, 7, 11)
+    cap['MAX_DATA_FREQ_DDR5'] = cap['MAX_DATA_RATE_DDR5'] * 266
+    cap['IBECC'] = True if read_bits(CAP_E, 0, 12) == 0 else False  # IBECC_DIS
+    #cap['VDDQ_VOLTAGE_MAX'] = read_bits(CAP_E, 0, 13, 23)  # VDDQ_TX Maximum VID value
+    cap['VDDQ_VOLTAGE_MAX'] = round(read_bits(CAP_E, 0, 13, 23) * 5 / 1000, 3)  # VDDQ_TX Maximum VID value (granularity UNDOC !!!)
 
     gdict['memory'] = { }
     mi = gdict['memory']
