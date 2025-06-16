@@ -61,6 +61,7 @@ def SdkInit(cfg = None, verbose = 0):
         config_flag = int(cfg)
     errorcode = INT(0)
     extended_errorcode = INT(0)
+    print(f'Initialization of cpuidsdk64.dll and cpuz.sys ...')
     rc = func(objptr, szDllPath, szDllFilename, config_flag, byref(errorcode), byref(extended_errorcode))
     print('SdkInit =', rc, ' errorcode =', errorcode.value, ' code =', extended_errorcode.value)
     if rc != 1:
