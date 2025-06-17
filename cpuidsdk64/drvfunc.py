@@ -47,6 +47,9 @@ def port_read(port, size):
     out = struct.unpack(buf_fmt, buf)
     return out[0]
 
+def port_read_u1(port):
+    return port_read(port, 1)
+
 def port_read_u4(port):
     return port_read(port, 4)
 
@@ -68,6 +71,9 @@ def port_write(port, value, size = None):
         raise ValueError()
     inbuf = struct.pack('<II', port, value)
     DeviceIoControl(_drv, IOCTL(func_num), inbuf, 8, None)
+
+def port_write_u1(port, value):
+    return port_write(port, value, 1)
 
 def port_write_u4(port, value):
     return port_write(port, value, 4)

@@ -1,7 +1,11 @@
+import os
+import sys
+import atexit
 import ctypes
 from ctypes.wintypes import *
-from ctypes import CFUNCTYPE
+from ctypes import CFUNCTYPE, POINTER
 from ctypes import byref
+from types import SimpleNamespace
 
 INT64 = LARGE_INTEGER
 UINT64 = ULARGE_INTEGER
@@ -62,6 +66,30 @@ FILE_READ_ACCESS = 0x0001
 FILE_WRITE_ACCESS = 0x0002
 
 INVALID_HANDLE_VALUE = HANDLE(-1).value
+
+# Exception/Status codes from winuser.h and winnt.h
+STATUS_WAIT_0 = 0
+STATUS_ABANDONED_WAIT_0 = 128
+STATUS_USER_APC = 192
+STATUS_TIMEOUT = 258
+STATUS_PENDING = 259
+
+WAIT_FAILED = -1
+WAIT_OBJECT_0 = STATUS_WAIT_0 + 0
+
+WAIT_ABANDONED = STATUS_ABANDONED_WAIT_0 + 0
+WAIT_ABANDONED_0 = STATUS_ABANDONED_WAIT_0 + 0
+
+WAIT_TIMEOUT = STATUS_TIMEOUT
+WAIT_IO_COMPLETION = STATUS_USER_APC
+STILL_ACTIVE = STATUS_PENDING
+
+ERROR_SUCCESS = 0
+ERROR_HANDLE_EOF = 38
+ERROR_INSUFFICIENT_BUFFER = 122
+ERROR_NO_MORE_ITEMS = 259
+ERROR_IO_INCOMPLETE = 996
+ERROR_IO_PENDING = 997
 
 def SETDIM(value, bits):  # set dimension
     if bits <= 1:
@@ -156,56 +184,29 @@ def get_file_version_info(filename):
         'type': fixed_file_info.dwFileType,
     }
 
-_kernel32 = ctypes.WinDLL('kernel32')
+##################################################################################################
 
-class Win32FileHandle:
-    def __init__(self):
-        global _kernel32
-        self.handle = None
-        self.CreateFileA = _kernel32.CreateFileA
-        self.CreateFileA.argtypes = [ LPCSTR, DWORD, DWORD, LPVOID, DWORD, DWORD, HANDLE ]
-        self.CreateFileA.restype = HANDLE
-        self.CloseHandle = _kernel32.CloseHandle
-        self.CloseHandle.argtypes = [ HANDLE ]
-        self.CloseHandle.restype = BOOL
-    
-    def __del__(self):
-        self.close()
-        
-    def __repr__(self):
-        return f'<HANDLE:0x{self.handle:X}>'
-        
-    def create(self, file_path, access = GENERIC_READ, share_mode = 0, creation = OPEN_EXISTING, attributes = FILE_ATTRIBUTE_NORMAL):
-        if self.handle:
-            raise RuntimeError('Handle needded close!')
-        if isinstance(file_path, str):
-            file_path = file_path.encode('latin-1')
-        handle = self.CreateFileA(
-            file_path,
-            access,
-            share_mode,
-            None,
-            creation,
-            attributes,
-            None
-        )
-        if handle == INVALID_HANDLE_VALUE:
-            error_code = ctypes.get_last_error()
-            raise ctypes.WinError(error_code)
-        self.handle = handle
-        return self
-    
-    def close(self):
-        if self.handle:
-            self.CloseHandle(self.handle)
-            #if not self.CloseHandle(self.handle):
-            #    error_code = ctypes.get_last_error()
-            #    raise ctypes.WinError(error_code)
+MAX_DEVICE_PATH_LEN = 2000
 
-def CreateFileA(file_path, access = GENERIC_READ, share_mode = 0, creation = OPEN_EXISTING, attributes = FILE_ATTRIBUTE_NORMAL):
-    hnd = Win32FileHandle()
-    hnd.create(file_path, access, share_mode, creation, attributes)
-    return hnd
+class SP_DEVICE_INTERFACE_DETAIL_DATA_A(ctypes.Structure):
+    _fields_ = [
+        ('cbSize', DWORD),
+        ('DevicePath', CHAR * MAX_DEVICE_PATH_LEN),
+    ]
+    _pack_ = 1
+    def __str__(self):
+        return f'DevicePath: "{self.DevicePath.decode("latin-1")}"'
+
+PSP_DEVICE_INTERFACE_DETAIL_DATA_A = POINTER(SP_DEVICE_INTERFACE_DETAIL_DATA_A)
+
+class SECURITY_ATTRIBUTES(ctypes.Structure):
+    _fields_ = [
+        ('nLength', DWORD),
+        ('lpSecurityDescriptor', LPVOID),
+        ('bInheritHandle', BOOL),
+    ]
+
+LPSECURITY_ATTRIBUTES = POINTER(SECURITY_ATTRIBUTES)
 
 class _OFFSET(ctypes.Structure):
     _fields_ = [
@@ -231,15 +232,168 @@ class OVERLAPPED(ctypes.Structure):
 
 LPOVERLAPPED = ctypes.POINTER(OVERLAPPED)
 
-fnDeviceIoControl = _kernel32.DeviceIoControl
-fnDeviceIoControl.argtypes = [ HANDLE, DWORD, LPVOID, DWORD, LPVOID, DWORD, LPDWORD, LPOVERLAPPED ]
-fnDeviceIoControl.restype = BOOL
+###########################################################################################
+
+_kernel32 = ctypes.WinDLL('kernel32')
+_win32 = SimpleNamespace()
+
+_win32.CloseHandle = _kernel32.CloseHandle
+_win32.CloseHandle.argtypes = [ HANDLE ]
+_win32.CloseHandle.restype = BOOL 
+
+_win32.CreateFileA = _kernel32.CreateFileA
+_win32.CreateFileA.argtypes = [
+    LPCSTR,                # lpFileName,
+    DWORD,                 # dwDesiredAccess,
+    DWORD,                 # dwShareMode,
+    LPSECURITY_ATTRIBUTES, # lpSecurityAttributes,
+    DWORD,                 # dwCreationDisposition,
+    DWORD,                 # dwFlagsAndAttributes,
+    HANDLE                 # hTemplateFile
+]
+_win32.CreateFileA.restype = HANDLE 
+
+_win32.CreateEventA = _kernel32.CreateEventA
+_win32.CreateEventA.argtypes = [
+    LPSECURITY_ATTRIBUTES, # lpEventAttributes,
+    BOOL,                  # bManualReset,
+    BOOL,                  # bInitialState,
+    LPCSTR                 # lpName
+]
+_win32.CloseHandle.restype = BOOL 
+
+_win32.SetEvent = _kernel32.SetEvent
+_win32.SetEvent.argtypes = [ HANDLE ]   # hEvent
+_win32.SetEvent.restype = BOOL
+
+_win32.ResetEvent = _kernel32.ResetEvent
+_win32.ResetEvent.argtypes = [ HANDLE ]   # hEvent
+_win32.ResetEvent.restype = BOOL
+
+_win32.CancelIo = _kernel32.CancelIo
+_win32.CancelIo.argtypes = [ HANDLE ]   # hFile
+_win32.CancelIo.restype = BOOL
+
+_win32.WaitForSingleObject = _kernel32.WaitForSingleObject
+_win32.WaitForSingleObject.argtypes = [
+    HANDLE,  # hHandle,
+    DWORD    # dwMilliseconds
+]
+_win32.WaitForSingleObject.restype = DWORD 
+
+_win32.DeviceIoControl = _kernel32.DeviceIoControl
+_win32.DeviceIoControl.argtypes = [ HANDLE, DWORD, LPVOID, DWORD, LPVOID, DWORD, LPDWORD, LPOVERLAPPED ]
+_win32.DeviceIoControl.restype = BOOL
+
+_win32.CreateMutexA = _kernel32.CreateMutexA
+_win32.CreateMutexA.argtypes = [
+    LPSECURITY_ATTRIBUTES, # lpMutexAttributes,
+    BOOL,                  # bInitialOwner,
+    LPCSTR                 # lpName
+]
+_win32.CreateMutexA.restype = BOOL
+
+_win32.ReleaseMutex = _kernel32.ReleaseMutex
+_win32.ReleaseMutex.argtypes = [ HANDLE ]   # hMutex
+_win32.ReleaseMutex.restype = BOOL
+
+###############################################################################################
+
+class Win32FileHandle:
+    def __init__(self):
+        global _win32
+        self.handle = None
+        self.name = None
+        self.is_mutex = False
+        self.release_on_close = False
+        atexit.register(self.cleanup)
+    
+    def __del__(self):
+        self.close()
+
+    def cleanup(self):
+        self.close()
+
+    def close(self):
+        global _win32
+        if self.handle and _win32 and _win32.CloseHandle:
+            if self.is_mutex and self.release_on_close:
+                self.release_mutex()
+            _win32.CloseHandle(self.handle)
+        self.handle = None
+        self.name = None
+        self.is_mutex = False
+        self.release_on_close = False
+
+    def __repr__(self):
+        return f'<HANDLE:0x{self.handle:X}>' if self.handle else '<HANDLE:null>'
+        
+    def create_file(self, file_path, access = GENERIC_READ, share_mode = 0, creation = OPEN_EXISTING, attributes = FILE_ATTRIBUTE_NORMAL):
+        global _win32
+        if self.handle:
+            raise RuntimeError('Handle already used!')
+        if isinstance(file_path, str):
+            file_path = file_path.encode('latin-1')
+        handle = _win32.CreateFileA(file_path, access, share_mode, None, creation, attributes, None)
+        if not handle or handle == INVALID_HANDLE_VALUE:
+            errcode = ctypes.get_last_error()
+            raise ctypes.WinError(errcode)
+        self.handle = handle
+        self.name = file_path.decode('latin-1')
+        self.is_mutex = True
+        return self
+
+    def create_mutex(self, obj_path, bInitialOwner = False, release_on_close = True):
+        global _win32
+        if self.handle:
+            raise RuntimeError('Handle already used!')
+        if isinstance(obj_path, str):
+            obj_path = obj_path.encode('latin-1')
+        lpMutexAttributes = None
+        handle = _win32.CreateMutexA(lpMutexAttributes, bInitialOwner, obj_path)
+        if not handle:
+            errcode = ctypes.get_last_error()
+            raise ctypes.WinError(errcode)
+        self.handle = handle
+        self.name = obj_path.decode('latin-1')
+        self.release_on_close = release_on_close
+        return self
+
+    def release_mutex(self):
+        global _win32
+        if not self.handle:
+            raise ValueError('Incorrect mutex handle!')
+        rc = _win32.ReleaseMutex(self.handle)
+        return True if rc != 0 else False
+
+    release = release_mutex
+
+    def acquire_mutex(self, wait_ms = 2000):
+        global _win32
+        if not self.handle:
+            raise ValueError('Incorrect mutex handle!')
+        rc = _win32.WaitForSingleObject(self.handle, wait_ms)
+        return True if rc == STATUS_WAIT_0 else False
+
+    acquire = acquire_mutex
+
+def CreateFileA(file_path, access = GENERIC_READ, share_mode = 0, creation = OPEN_EXISTING, attributes = FILE_ATTRIBUTE_NORMAL):
+    handle = Win32FileHandle()
+    handle.create_file(file_path, access, share_mode, creation, attributes)
+    return handle
+
+def CreateMutexA(obj_path, bInitialOwner = False):
+    handle = Win32FileHandle()
+    handle.create_mutex(obj_path, bInitialOwner)
+    return handle
 
 def rawDeviceIoControl(hDevice, ioctl, lpInBuffer, nInBufferSize, lpOutBuffer, nOutBufferSize, lpBytesReturned, lpOverlapped):
-    rc = fnDeviceIoControl(hDevice, ioctl, lpInBuffer, nInBufferSize, lpOutBuffer, nOutBufferSize, lpBytesReturned, lpOverlapped)
+    global _win32
+    rc = _win32.DeviceIoControl(hDevice, ioctl, lpInBuffer, nInBufferSize, lpOutBuffer, nOutBufferSize, lpBytesReturned, lpOverlapped)
     return True if rc != 0 else False
 
-def DeviceIoControl(hDevice, ioctl, inbuf, outbufsize, dummy):
+def DeviceIoControl(hDevice, ioctl, inbuf, outbufsize, dummy = None):
+    global _win32
     if isinstance(hDevice, Win32FileHandle):
         hDevice = hDevice.handle
     lpInBuffer = None
@@ -255,11 +409,9 @@ def DeviceIoControl(hDevice, ioctl, inbuf, outbufsize, dummy):
         lpOutBuffer = ctypes.create_string_buffer(outbufsize)
         lpOutBuffer = ctypes.cast(lpOutBuffer, ctypes.POINTER(ctypes.c_char))
     bytesReturned = DWORD(0)
-    rc = fnDeviceIoControl(hDevice, ioctl, lpInBuffer, nInBufferSize, lpOutBuffer, outbufsize, byref(bytesReturned), None)
+    rc = _win32.DeviceIoControl(hDevice, ioctl, lpInBuffer, nInBufferSize, lpOutBuffer, outbufsize, byref(bytesReturned), None)
     if rc == 0:
         return False
-    if bytesReturned.value > 0x4000:
-        raise RuntimeError()
     if bytesReturned.value > outbufsize:
         raise RuntimeError()
     if not lpOutBuffer or bytesReturned.value == 0:

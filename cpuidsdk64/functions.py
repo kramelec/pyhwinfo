@@ -103,8 +103,8 @@ def GetDLLVersion():
 
 def SdkCleanup():
     objptr = get_objptr(check = False)
-    print("SdkCleanup...")
     if objptr:
+        print("SdkCleanup...")
         SdkClose()
         DestroyInstance()
 
