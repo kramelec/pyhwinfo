@@ -90,7 +90,7 @@ CFG_ADDR_PORT = 0xCF8
 CFG_DATA_PORT = 0xCFC
 
 # ioctl: 9C402700
-def pci_cfg_read(bus, dev, fun, reg, size, method = 1):
+def pci_cfg_read(bus, dev, fun, offset, size, method = 1):
     _drv = _get_drv()
     out_decimal = False
     if isinstance(size, str):
@@ -103,12 +103,12 @@ def pci_cfg_read(bus, dev, fun, reg, size, method = 1):
         if size > 0:
             data = bytearray(size)
             data_addr = get_bytes_addr(data)
-        inbuf = struct.pack('<IIIIIII', bus, dev, fun, reg, size, HIDWORD(data_addr), LODWORD(data_addr))
+        inbuf = struct.pack('<IIIIIII', bus, dev, fun, offset, size, HIDWORD(data_addr), LODWORD(data_addr))
         # BusDataType = PCIConfiguration  # 4
         # BusNumber = bus
         # SlotNumber = (SETDIM(fun, 3) << 5) | SETDIM(dev, 5)
         # Buffer = HIDWORD(data_addr) << 32 + LODWORD(data_addr)
-        # Offset = reg
+        # Offset = offset
         # Length = size 
         # ULONG HalGetBusDataByOffset(BUS_DATA_TYPE BusDataType, ULONG BusNumber, ULONG SlotNumber, PVOID Buffer, ULONG Offset, ULONG Length);
         buf = DeviceIoControl(_drv, IOCTL(CPUZ_PCI_CFG_READ), inbuf, 4, None)
@@ -116,8 +116,8 @@ def pci_cfg_read(bus, dev, fun, reg, size, method = 1):
             raise RuntimeError(f'DeviceIoControl failed') # GetLastError
         sz = int.from_bytes(buf, 'little', signed = True)
         if sz == 2:
-            if size > 0:
-                data = b'\xFF\xFF\xFF\xFF' * ((size - 1) // 4 + 1)
+            #if size > 0:
+            #    data = b'\xFF\xFF\xFF\xFF' * ((size - 1) // 4 + 1)
             return bytes(data) if not out_decimal else int.from_bytes(data, 'little')
         if sz == size:
             return bytes(data) if not out_decimal else int.from_bytes(data, 'little')
@@ -126,7 +126,7 @@ def pci_cfg_read(bus, dev, fun, reg, size, method = 1):
         raise ValueError(f'Incorrect size argument')
     buf = b''
     while len(buf) < size:
-        addr = CFG_ADDR(bus, dev, fun, reg + len(buf))
+        addr = CFG_ADDR(bus, dev, fun, offset + len(buf))
         prev_state = port_read_u4(CFG_ADDR_PORT)
         try:
             port_write_u4(CFG_ADDR_PORT, addr & 0xFFFFFFFC)
@@ -138,7 +138,7 @@ def pci_cfg_read(bus, dev, fun, reg, size, method = 1):
     return buf if not out_decimal else int.from_bytes(buf, 'little')
 
 # ioctl: 9C402704
-def pci_cfg_write(bus, dev, fun, reg, data, method = 1):
+def pci_cfg_write(bus, dev, fun, offset, data, method = 1):
     _drv = _get_drv()
     if isinstance(data, int):
         data_size = 4 if data <= 0xFFFFFFFF else 8
@@ -150,7 +150,7 @@ def pci_cfg_write(bus, dev, fun, reg, data, method = 1):
     if method == 1:
         size = len(data)
         data_addr = get_bytes_addr(data)
-        inbuf = struct.pack('<IIIIIII', bus, dev, fun, reg, size, HIDWORD(data_addr), LODWORD(data_addr))
+        inbuf = struct.pack('<IIIIIII', bus, dev, fun, offset, size, HIDWORD(data_addr), LODWORD(data_addr))
         # ULONG HalSetBusDataByOffset(BUS_DATA_TYPE BusDataType, ULONG BusNumber, ULONG SlotNumber, PVOID Buffer, ULONG Offset, ULONG Length);
         buf = DeviceIoControl(_drv, IOCTL(CPUZ_PCI_CFG_WRITE), inbuf, 4, None)
         if not buf or len(buf) != 4:
@@ -159,9 +159,9 @@ def pci_cfg_write(bus, dev, fun, reg, data, method = 1):
         return True if rc != 0 else False
     pos = 0
     while pos < len(data):
-        addr = CFG_ADDR(bus, dev, fun, reg + pos)
+        addr = CFG_ADDR(bus, dev, fun, offset + pos)
         if (addr & 3) != 0:
-            raise ValueError(f'Incorrect reg argument')
+            raise ValueError(f'Incorrect offset argument')
         prev_state = port_read_u4(CFG_ADDR_PORT)
         try:
             port_write_u4(CFG_ADDR_PORT, addr & 0xFFFFFFFC)
@@ -171,12 +171,12 @@ def pci_cfg_write(bus, dev, fun, reg, data, method = 1):
         pos += 4
     return True
 
-def CFG_ADDR_EX(bus, dev, fun, reg):
+def CFG_ADDR_EX(bus, dev, fun, off):
     bus = SETDIM(bus, 12)
     dev = SETDIM(dev, 5)
     fun = SETDIM(fun, 3)
-    reg = SETDIM(reg, 12)
-    return (bus << 20) | (dev << 15) | (fun << 12) | reg
+    off = SETDIM(off, 12)
+    return (bus << 20) | (dev << 15) | (fun << 12) | off
 
 # ioctl: 9C402708
 def pci_cfg_cmd(cfg_addr, value):
@@ -188,8 +188,8 @@ def pci_cfg_cmd(cfg_addr, value):
     return int.from_bytes(buf, 'little', signed = False)
 
 # pci_cfg_read_ex    
-def pci_cfg_command(bus, dev, fun, reg):
-    addr = CFG_ADDR_EX(bus, dev, fun, reg)
+def pci_cfg_command(bus, dev, fun, offset):
+    addr = CFG_ADDR_EX(bus, dev, fun, offset)
     val = pci_cfg_read(bus, dev, fun, 0, 4);
     if not val:
         return None
@@ -304,7 +304,7 @@ def phymem_read(addr, size, out_decimal = False):
     return None
 
 # ioctl: 9C402544
-def phymem_cfg_read(bus, dev, fun, reg, size):
+def phymem_cfg_read(bus, dev, fun, offset, size):
     raise RuntimeError('Not implemented')
 
 # ioctl: 9C40254C

@@ -6,6 +6,7 @@ from ctypes.wintypes import *
 from ctypes import CFUNCTYPE, POINTER
 from ctypes import byref
 from types import SimpleNamespace
+import struct
 
 INT64 = LARGE_INTEGER
 UINT64 = ULARGE_INTEGER
@@ -65,7 +66,11 @@ FILE_SPECIAL_ACCESS = FILE_ANY_ACCESS
 FILE_READ_ACCESS = 0x0001
 FILE_WRITE_ACCESS = 0x0002
 
-INVALID_HANDLE_VALUE = HANDLE(-1).value
+AC_DELETE       = 0x00010000
+AC_READ_CONTROL = 0x00020000
+AC_WRITE_DAC    = 0x00040000
+AC_SYNCHRONIZE  = 0x00100000
+AC_WRITE_OWNER  = 0x00800000
 
 # Exception/Status codes from winuser.h and winnt.h
 STATUS_WAIT_0 = 0
@@ -87,9 +92,32 @@ STILL_ACTIVE = STATUS_PENDING
 ERROR_SUCCESS = 0
 ERROR_HANDLE_EOF = 38
 ERROR_INSUFFICIENT_BUFFER = 122
+ERROR_ALREADY_EXISTS = 183
 ERROR_NO_MORE_ITEMS = 259
 ERROR_IO_INCOMPLETE = 996
 ERROR_IO_PENDING = 997
+
+INVALID_HANDLE_VALUE = HANDLE(-1).value
+
+def int_from_bytes(buf, offset, size, signed = False, big = False):
+    return int.from_bytes(buf[offset:offset+size], 'big' if big else 'little', signed = signed)
+
+def int_encode(value, width, signed = False, big = False):
+    prefix = '>' if big else '<'
+    if isinstance(width, int):
+        if width == 1:
+            width = 'B'
+        elif width == 2:
+            width = 'H'
+        elif width == 4:
+            width = 'I'
+        elif width == 8:
+            width = 'Q'
+        else:
+            raise RuntimeError()
+        if signed:
+            width = width.lower()
+    return struct.pack(prefix + width, value)
 
 def SETDIM(value, bits):  # set dimension
     if bits <= 1:
@@ -129,6 +157,23 @@ def ROUNDUP4(value):
 
 def divRoundUp(n, d):
     return (n + d - 1) // d
+
+def get_bits(buf, offset, firts_bit, last_bit = None, bits = None):
+    if offset is None:
+        offset = 0
+    if last_bit is None and bits is None:
+        last_bit = firts_bit
+    if last_bit is None and isinstance(bits, int):
+        last_bit = firts_bit + bits - 1
+    if last_bit < firts_bit:
+        raise ValueError()
+    size = ((last_bit + 1) // 8) + 1
+    if isinstance(buf, int) and size <= 8:
+        buf = int_encode(buf, 8)
+    value = int_from_bytes(buf, offset, size)
+    if firts_bit > 0:
+        value >>= firts_bit
+    return SETDIM(value, last_bit - firts_bit + 1)
 
 def get_bytes_addr(data):
     Buffer = ctypes.c_char * len(data)
@@ -285,13 +330,21 @@ _win32.DeviceIoControl = _kernel32.DeviceIoControl
 _win32.DeviceIoControl.argtypes = [ HANDLE, DWORD, LPVOID, DWORD, LPVOID, DWORD, LPDWORD, LPOVERLAPPED ]
 _win32.DeviceIoControl.restype = BOOL
 
-_win32.CreateMutexA = _kernel32.CreateMutexA
-_win32.CreateMutexA.argtypes = [
+_win32.CreateMutexW = _kernel32.CreateMutexA
+_win32.CreateMutexW.argtypes = [
     LPSECURITY_ATTRIBUTES, # lpMutexAttributes,
     BOOL,                  # bInitialOwner,
-    LPCSTR                 # lpName
+    LPCWSTR                # lpName
 ]
-_win32.CreateMutexA.restype = BOOL
+_win32.CreateMutexW.restype = HANDLE
+
+_win32.OpenMutexW = _kernel32.OpenMutexW
+_win32.OpenMutexW.argtypes = [
+    DWORD,     # dwDesiredAccess
+    BOOL,      # bInheritHandle,
+    LPCWSTR    # lpName
+]
+_win32.OpenMutexW.restype = HANDLE
 
 _win32.ReleaseMutex = _kernel32.ReleaseMutex
 _win32.ReleaseMutex.argtypes = [ HANDLE ]   # hMutex
@@ -302,11 +355,16 @@ _win32.ReleaseMutex.restype = BOOL
 class Win32FileHandle:
     def __init__(self):
         global _win32
+        self._init()
+        atexit.register(self.cleanup)
+
+    def _init(self, close = False):
         self.handle = None
         self.name = None
         self.is_mutex = False
-        self.release_on_close = False
-        atexit.register(self.cleanup)
+        self.is_acquired = False
+        self.release_on_close = True
+        self.msgerr = None
     
     def __del__(self):
         self.close()
@@ -320,60 +378,81 @@ class Win32FileHandle:
             if self.is_mutex and self.release_on_close:
                 self.release_mutex()
             _win32.CloseHandle(self.handle)
-        self.handle = None
-        self.name = None
-        self.is_mutex = False
-        self.release_on_close = False
+        self._init(close = True)
 
     def __repr__(self):
         return f'<HANDLE:0x{self.handle:X}>' if self.handle else '<HANDLE:null>'
         
     def create_file(self, file_path, access = GENERIC_READ, share_mode = 0, creation = OPEN_EXISTING, attributes = FILE_ATTRIBUTE_NORMAL):
         global _win32
+        self.errcode = 0
         if self.handle:
             raise RuntimeError('Handle already used!')
         if isinstance(file_path, str):
             file_path = file_path.encode('latin-1')
         handle = _win32.CreateFileA(file_path, access, share_mode, None, creation, attributes, None)
+        self.errcode = ctypes.get_last_error()
         if not handle or handle == INVALID_HANDLE_VALUE:
-            errcode = ctypes.get_last_error()
-            raise ctypes.WinError(errcode)
+            raise ctypes.WinError(self.errcode)
         self.handle = handle
         self.name = file_path.decode('latin-1')
-        self.is_mutex = True
         return self
 
-    def create_mutex(self, obj_path, bInitialOwner = False, release_on_close = True):
+    def create_mutex(self, obj_path, bInitialOwner = False, release_on_close = True, msgerr = None, open = False, throwable = True):
         global _win32
+        self.errcode = 0
         if self.handle:
             raise RuntimeError('Handle already used!')
-        if isinstance(obj_path, str):
-            obj_path = obj_path.encode('latin-1')
-        lpMutexAttributes = None
-        handle = _win32.CreateMutexA(lpMutexAttributes, bInitialOwner, obj_path)
-        if not handle:
-            errcode = ctypes.get_last_error()
-            raise ctypes.WinError(errcode)
-        self.handle = handle
-        self.name = obj_path.decode('latin-1')
+        self.handle = None
+        self.name = obj_path # .decode('utf-16-le')
+        if open:
+            dwDesiredAccess = AC_SYNCHRONIZE
+            bInheritHandle = bInitialOwner
+            handle = _win32.OpenMutexW(dwDesiredAccess, bInheritHandle, obj_path)
+        else:
+            lpMutexAttributes = None
+            handle = _win32.CreateMutexW(lpMutexAttributes, bInitialOwner, obj_path)
+        self.errcode = ctypes.get_last_error()
         self.release_on_close = release_on_close
+        self.is_acquired = False
+        self.is_mutex = True
+        if not handle:
+            if throwable:
+                raise ctypes.WinError(self.errcode)
+            return None
+        self.handle = handle        
         return self
 
-    def release_mutex(self):
+    def release_mutex(self, throwable = False):
         global _win32
         if not self.handle:
-            raise ValueError('Incorrect mutex handle!')
+            if throwable:
+                raise ValueError('Incorrect mutex handle!')
+            return False
         rc = _win32.ReleaseMutex(self.handle)
+        if rc != 0 and self.is_acquired:
+            self.is_acquired = False
         return True if rc != 0 else False
 
     release = release_mutex
 
-    def acquire_mutex(self, wait_ms = 2000):
+    def acquire_mutex(self, wait_ms = 2000, throwable = True):
         global _win32
+        if self.is_acquired:
+            return True
         if not self.handle:
-            raise ValueError('Incorrect mutex handle!')
+            if throwable:
+                raise ValueError('Incorrect mutex handle!')
+            return False
         rc = _win32.WaitForSingleObject(self.handle, wait_ms)
-        return True if rc == STATUS_WAIT_0 else False
+        if rc != STATUS_WAIT_0 and throwable:
+            if not self.msgerr:
+                raise RuntimeError(f'ERROR: Cannot acquire a mutex "{self.name}"')
+            raise RuntimeError(f'ERROR: {msgerr}')
+        if rc == STATUS_WAIT_0:
+            self.is_acquired = True
+            return True
+        return False
 
     acquire = acquire_mutex
 
@@ -382,9 +461,14 @@ def CreateFileA(file_path, access = GENERIC_READ, share_mode = 0, creation = OPE
     handle.create_file(file_path, access, share_mode, creation, attributes)
     return handle
 
-def CreateMutexA(obj_path, bInitialOwner = False):
+def CreateMutexW(obj_path, bInitialOwner = False, throwable = True):
     handle = Win32FileHandle()
-    handle.create_mutex(obj_path, bInitialOwner)
+    handle.create_mutex(obj_path, bInitialOwner, throwable = throwable)
+    return handle
+
+def OpenMutexW(obj_path, bInheritHandle = False, throwable = True):
+    handle = Win32FileHandle()
+    handle.create_mutex(obj_path, bInheritHandle, throwable = throwable, open = True)
     return handle
 
 def rawDeviceIoControl(hDevice, ioctl, lpInBuffer, nInBufferSize, lpOutBuffer, nOutBufferSize, lpBytesReturned, lpOverlapped):
