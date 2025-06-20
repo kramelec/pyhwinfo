@@ -72,6 +72,7 @@ I2C_READ   = 1
 SPD5_MR3   = 0x03   # Vendor ID (two bytes)
 SPD5_MR11  = 0x0B   # I2C Legacy Mode Device Configuration
 SPD5_MR18  = 0x12   # Device Configuration
+SPD5_MR48  = 0x30   # Device Status
 SPD5_MR49  = 0x31   # TS Current Sensed Temperature (two bytes)
 
 # i801 Hosts Addresses
@@ -107,149 +108,96 @@ SMBHSTCNT_I2C_BLOCK_DATA    = 0x18
 SMBHSTCNT_LAST_BYTE         = 0x20
 SMBHSTCNT_START             = 0x40
 
-# https://github.com/memtest86plus/memtest86plus/blob/2f9b165eec4de20ec4b23725c90d3989517ee3fe/system/x86/i2c.c#L400
-def _smbus_reset():
-    status = port_read_u1(smb_addr + SMBHSTSTS)
-    status &= 0x1F  # for excluding SMBHSTSTS_BYTE_DONE | SMBHSTSTS_INUSE_STS | SMBHSTSTS_SMBALERT_STS
-    port_write_u1(smb_addr + SMBHSTSTS, status)
-    time.sleep(0.001)
-    status = port_read_u1(smb_addr + SMBHSTSTS)
-    if (status & 0x1F) != 0:
-        print(f'SMBUS: cannot reset 0x{status:X} => 0x{status & 0x1F:X} ')
-        raise RuntimeError(f'SMBUS: cannot reset 0x{status:X} => 0x{status & 0x1F:X} ')
+# =================================================================================================
 
-# https://github.com/memtest86plus/memtest86plus/blob/2f9b165eec4de20ec4b23725c90d3989517ee3fe/system/x86/i2c.c#L624
-def _smbus_process():
-    timeout = 0
-    status = port_read_u1(smb_addr + SMBHSTSTS)
-    if (status & 0x1F) != 0:
-        port_write_u1(smb_addr + SMBHSTSTS, status & 0x1F)
-        time.sleep(0.0005)
-        status = port_read_u1(smb_addr + SMBHSTSTS)
-        if (status & 0x1F) != 0:
-            return 1
+# source: S34HTS08AB_E.pdf   Table 82 Register MR11
+# bit3 = 0 => 1 Byte Addressing for SPD5 Hub Device Memory
+def _mem_spd_set_page(slot, page_number, check_status = True):    
+    if page_number < 0 or page_number >= 8:   # DDR5 SPD has 8 pages
+        raise ValueError()    
+    rc = smbus_write_u2(smb_addr, SMBUS_SPD_ADDRESS + slot, SPD5_MR11, page_number)
+    if not rc:
+        return False
+    if not check_status:
+        return True
+    status = smbus_read_u1(smb_addr, SMBUS_SPD_ADDRESS + slot, SPD5_MR48)
+    return True if status == 0 else False
 
-    cnt = port_read_u1(smb_addr + SMBHSTCNT)
-    port_write_u1(smb_addr + SMBHSTCNT, cnt | SMBHSTCNT_START)
+def _mem_spd_read_reg(slot, reg_offset, set_page = None):
+    if set_page is not None:
+        rc = _mem_spd_set_page(slot, set_page)
+        if not rc:
+            return None
+    return smbus_read_u1(smb_addr, SMBUS_SPD_ADDRESS + slot, reg_offset)
 
-    # Some SMB controllers need this quirk.
-    #if (extra_initial_sleep_for_smb_transaction) {
-    #    usleep(extra_initial_sleep_for_smb_transaction);
-    #}
-    while True:
-        time.sleep(0.0005)
-        status = port_read_u1(smb_addr + SMBHSTSTS)
-        if (status & 1) == 0:
-            break
-        timeout += 1
-        if timeout >= 100:
-            break
-
-    if timeout >= 100:
-        return 2
-
-    if (status & 0x1C) != 0:
-        return status
-
-    status = port_read_u1(smb_addr + SMBHSTSTS)
-    if (status & 0x1F) != 0:
-        status = port_read_u1(smb_addr + SMBHSTSTS)
-        port_write_u1(smb_addr + SMBHSTSTS, status)
-
-    return 0
-
-# https://github.com/memtest86plus/memtest86plus/blob/2f9b165eec4de20ec4b23725c90d3989517ee3fe/system/x86/i2c.c#L548
-def _mem_spd_read_byte(addr, offset):
-    global g_mutex, smb_addr, smb_vid, smb_ddr_ver
-    if smb_ddr_ver == 4:
-        raise NotImplementedError()
-    elif smb_ddr_ver == 5:
-        spd_page = offset // 0x80
-        if smb_vid == PCI_VENDOR_ID_INTEL:
-            # On Intel, we use the process call method because the SMBUS write command
-            # is sometimes disabled by BIOS to avoid unexpected SPD corruption
-            port_write_u1(smb_addr + SMBHSTADD, (addr << 1) | I2C_READ)  # set SMBUS addr
-            port_write_u1(smb_addr + SMBHSTCMD, SPD5_MR11)             # set I2C Legacy Mode Device Configuration   # see doc: S34HTS08AB_E.pdf
-            port_write_u1(smb_addr + SMBHSTDAT0, SETDIM(spd_page, 3))  # set page number   # see doc: S34HTS08AB_E.pdf
-            port_write_u1(smb_addr + SMBHSTDAT1, 0)                    # ????
-            port_write_u1(smb_addr + SMBHSTCNT, SMBHSTCNT_PROC_CALL)
-            _smbus_process()
-            # These dummy read are mandatory to terminate a Proc Call
-            port_read_u1(smb_addr + SMBHSTDAT0)
-            port_read_u1(smb_addr + SMBHSTDAT1)
-        else:  # PCI_VENDOR_ID_AMD:
-            # On AMD, we continue to use the standard smbus write command as it seems
-            # more reliable than the process call method. This may be reevaluated later.
-            port_write_u1(smb_addr + SMBHSTADD, (addr << 1) | I2C_WRITE)
-            port_write_u1(smb_addr + SMBHSTCMD, SPD5_MR11)
-            port_write_u1(smb_addr + SMBHSTDAT0, SETDIM(spd_page, 3))
-            port_write_u1(smb_addr + SMBHSTCNT, SMBHSTCNT_BYTE_DATA)
-            _smbus_process()
-        spd_adr = offset - spd_page * 0x80
-        spd_adr |= 0x80
-    else:
-        raise RuntimeError(f'ERROR: DDR_ver = {smb_ddr_ver} not supported')
-
-    port_write_u1(smb_addr + SMBHSTADD, (addr << 1) | I2C_READ)
-    port_write_u1(smb_addr + SMBHSTCMD, spd_adr)
-    port_write_u1(smb_addr + SMBHSTCNT, SMBHSTCNT_BYTE_DATA)
-
-    rc = _smbus_process()
-    if rc == 0:
-        return port_read_u1(smb_addr + SMBHSTDAT0)
-
-    #print(f'err = 0x{rc:X}')
-    return None
-
-def mem_spd_read_byte(slot, offset):
+def mem_spd_read_reg(slot, reg_offset, size = 1):
     g_mutex.acquire()
     try:
-        #_smbus_reset()
-        return _mem_spd_read_byte(SMBUS_SPD_ADDRESS + slot, offset)
-    finally:
-        g_mutex.release()
-
-def mem_spd_read_full(slot):
-    buf = b''
-    g_mutex.acquire()
-    try:
-        #_smbus_reset()
-        for offset in range(0, 0x400):
-            val = _mem_spd_read_byte(SMBUS_SPD_ADDRESS + slot, offset)
-            if val is None:
-                break
-            buf += int_encode(val, 1)
-            pass
-        _mem_spd_read_byte(SMBUS_SPD_ADDRESS + slot, 0)
-        _mem_spd_read_byte(SMBUS_SPD_ADDRESS + slot, 0)
-    finally:
-        g_mutex.release()
-    return buf
-
-def _smbus_read_byte(addr, offset):
-    port_write_u1(smb_addr + SMBHSTADD, (addr << 1) | I2C_READ)
-    port_write_u1(smb_addr + SMBHSTCMD, offset)
-    port_write_u1(smb_addr + SMBHSTCNT, SMBHSTCNT_BYTE_DATA)
-    rc = _smbus_process()
-    if rc == 0:
-        return port_read_u1(smb_addr + SMBHSTDAT0)
-    return None
-
-def mem_spd_read_reg(slot, reg, size = 1):
-    g_mutex.acquire()
-    try:
-        #_smbus_reset()
-        offset = reg & 0x7F   # read reg, not SPD page !!!
-        val = _smbus_read_byte(SMBUS_SPD_ADDRESS + slot, offset)
+        offset = reg_offset & 0x7F   # read reg, not SPD page !!!
+        val = _mem_spd_read_reg(slot, offset, set_page = 0)
+        if val is None:
+            return None
         if size == 1:
             return val
         elif size == 2:
-            val_HI = _smbus_read_byte(SMBUS_SPD_ADDRESS + slot, offset + 1)
+            val_HI = _mem_spd_read_reg(slot, offset + 1)
+            if val_HI is None:
+                return None
             return (val_HI << 8) + val
         else:
             return None
     finally:
         g_mutex.release()
+    return None
+
+def _mem_spd_get_status(slot):
+    return _mem_spd_read_reg(slot, SPD5_MR48)
+
+def _mem_spd_read_byte(slot, offset):
+    if offset < 0 or offset >= 0x80:
+        raise ValueError()
+    return smbus_read_u1(smb_addr, SMBUS_SPD_ADDRESS + slot, offset | 0x80)
+
+def mem_spd_read_byte(slot, offset):
+    if offset < 0 or offset >= 0x400:   # DDR5 SPD of 1024 bytes len
+        raise ValueError()
+    g_mutex.acquire()
+    try:
+        spd_page = offset // 0x80
+        rc = _mem_spd_set_page(slot, spd_page)
+        if not rc:
+            return None
+        status = _mem_spd_get_status(slot)
+        if status != 0:
+            return None
+        return _mem_spd_read_byte(slot, offset - spd_page * 0x80)
+    finally:
+        g_mutex.release()
+    return None
+
+def mem_spd_read_full(slot):
+    buf = b''
+    g_mutex.acquire()
+    try:
+        for spd_page in range(0, 8):
+            rc = _mem_spd_set_page(slot, spd_page)
+            if not rc:
+                break
+            status = _mem_spd_get_status(slot)
+            if status != 0:
+                break
+            for offset in range(0, 0x80):
+                val = _mem_spd_read_byte(slot, offset)
+                if val is None:
+                    break
+                buf += int_encode(val, 1)
+        # restore page 0
+        _mem_spd_set_page(slot, 0)
+    finally:
+        g_mutex.release()
+    return buf
+    
+# =================================================================================================
 
 # https://github.com/memtest86plus/memtest86plus/blob/2f9b165eec4de20ec4b23725c90d3989517ee3fe/system/x86/i2c.c#L80
 def find_smb_controller(check_pci_did = True):
@@ -369,17 +317,10 @@ if __name__ == "__main__":
     if INF_SEL == 1:  # i3c protocol
         raise RuntimeError('ERROR: i3c protocol not supported!')
 
-    sys.exit(0)
-
     val = mem_spd_read_reg(0, SPD5_MR49, 2)  # MR49 + MR50 => TS Current Sensed Temperature
     print(f'spd[0][MR49] = 0x{val:04X}  =>  {temp_decode(val)} degC')
     val = mem_spd_read_reg(1, SPD5_MR49, 2)  # MR49 + MR50 => TS Current Sensed Temperature
     print(f'spd[1][MR49] = 0x{val:04X}  =>  {temp_decode(val)} degC')
-
-    #val = mem_spd_read_byte(slot = 0, offset = 0)
-    #print(f'SPD[0][0] = 0x{val:02X}')
-    #val = mem_spd_read_byte(slot = 0, offset = 1)
-    #print(f'SPD[0][1] = 0x{val:02X}')
 
     spd_data = mem_spd_read_full(0)
     print(f'SPD[0] = {spd_data.hex()}')
