@@ -49,14 +49,14 @@ def base_test():
     print('proc_B85B70B6:', proc_B85B70B6())
     print('proc_578EAF1D:', proc_578EAF1D())
     print('GetProcessorMaxCacheLevel:', GetProcessorMaxCacheLevel())
-    print('GetProcessorCacheParameters:', GetProcessorCacheParameters())
-    print('GetProcessorExtendedCacheParameters:', GetProcessorExtendedCacheParameters())
+    #print('GetProcessorCacheParameters:', GetProcessorCacheParameters())
+    #print('GetProcessorExtendedCacheParameters:', GetProcessorExtendedCacheParameters())
     print('GetHyperThreadingStatus:', GetHyperThreadingStatus())
     print('GetVirtualTechnologyStatus:', GetVirtualTechnologyStatus())
     print('GetProcessorID: 0x%X' % GetProcessorID())
     print('GetProcessorVoltage:', GetProcessorVoltage())
 
-    print('GetNorthBridgeVendor:', GetNorthBridgeVendor())
+    #print('GetNorthBridgeVendor:', GetNorthBridgeVendor())
 
     print('GetMemoryType:', GetMemoryType())
     print('GetMemorySize:', GetMemorySize())

@@ -75,6 +75,8 @@ _afunc('GetProcessorExtendedFamily')
 _afunc('GetProcessorModel')
 _afunc('GetProcessorExtendedModel')
 _afunc('GetProcessorSteppingID')
+_afunc('proc_C16F82DF')
+_afunc('proc_5CFCB9F9')
 _afunc('GetProcessorCoreCount')
 _afunc('GetProcessorThreadCount')
 _afunc('GetProcessorCoreThreadCount')
@@ -108,6 +110,7 @@ _afunc('GetNorthBridgeRevision')
 _afunc('GetSouthBridgeVendor')
 _afunc('GetSouthBridgeModel')
 _afunc('GetSouthBridgeRevision')
+_afunc('proc_AA???')
 _afunc('GetMemoryType')
 _afunc('GetMemorySize')
 _afunc('GetMemoryNumberOfChannels')
@@ -150,6 +153,7 @@ CPUZ_PCI_CFG_CMD       = 0x9C2
 
 CPUZ_SMBUS_READ_1      = 0x9A0
 CPUZ_SMBUS_WRITE_1     = 0x9A4
+CPUZ_SMBUS_WRITE_2     = 0x9A7
 
 CPUZ_MSR_READ          = 0x910
 CPUZ_MSR_WRITE         = 0x911

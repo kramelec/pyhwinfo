@@ -68,7 +68,7 @@ def SdkInit(cfg = None, verbose = 0):
         if errorcode.value == CPUIDSDK_ERROR_DRIVER:
             raise RuntimeError(f'Cannot load driver cpuz152.sys (errcode = {extended_errorcode.value})')
         raise RuntimeError(f'Cannot init cpuidsdk (errcode = {errorcode.value})')
-    drv_obj_path = r"\\.\cpuz152"
+    drv_obj_path = r"\\.\cpuz154"
     drv = CreateFileA(drv_obj_path, GENERIC_READ, FILE_SHARE_READ, OPEN_EXISTING, 0)    
     if verbose:
         print(f'driver handle =', drv)

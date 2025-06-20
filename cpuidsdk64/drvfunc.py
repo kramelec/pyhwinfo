@@ -231,6 +231,22 @@ def smbus_write_u1(port, addr, command, value, status = 0xBF):
     if rc == 0x33333333:
         pass
     return False
+
+# ioctl: 0x9C40269C
+def smbus_write_u2(port, addr, command, value, status = 0xBF):
+    _drv = _get_drv()
+    val_LO = value & 0xFF
+    val_HI = (value >> 8) & 0xFF
+    inbuf = struct.pack('<IIIIII', port, addr, command, status, val_LO, val_HI)
+    buf = DeviceIoControl(_drv, IOCTL(CPUZ_SMBUS_WRITE_2), inbuf, 16, None)
+    ok, status, vLO, vHI = struct.unpack('<IIII', buf)
+    if ok == 1:
+        return True
+    if vLO == 0 and vHI == 0:
+        pass
+    if vLO == 1 and vHI == 0:
+        pass
+    return False
     
 #######################################################
 #  MSR

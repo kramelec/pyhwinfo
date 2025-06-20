@@ -19,7 +19,7 @@ def get_pe_version(filename):
    info = get_file_version_info(filename)
    return info['file_version']
 
-supported_version = (1, 2, 6, 4)
+supported_version = (1, 2, 7, 9)
 
 dll_ver = get_pe_version(_sdk_dll_path)
 if dll_ver != supported_version:
