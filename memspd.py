@@ -107,6 +107,17 @@ SMBHSTCNT_I2C_BLOCK_DATA    = 0x18
 SMBHSTCNT_LAST_BYTE         = 0x20
 SMBHSTCNT_START             = 0x40
 
+# https://github.com/memtest86plus/memtest86plus/blob/2f9b165eec4de20ec4b23725c90d3989517ee3fe/system/x86/i2c.c#L400
+def _smbus_reset():
+    status = port_read_u1(smb_addr + SMBHSTSTS)
+    status &= 0x1F  # for excluding SMBHSTSTS_BYTE_DONE | SMBHSTSTS_INUSE_STS | SMBHSTSTS_SMBALERT_STS
+    port_write_u1(smb_addr + SMBHSTSTS, status)
+    time.sleep(0.001)
+    status = port_read_u1(smb_addr + SMBHSTSTS)
+    if (status & 0x1F) != 0:
+        print(f'SMBUS: cannot reset 0x{status:X} => 0x{status & 0x1F:X} ')
+        raise RuntimeError(f'SMBUS: cannot reset 0x{status:X} => 0x{status & 0x1F:X} ')
+
 # https://github.com/memtest86plus/memtest86plus/blob/2f9b165eec4de20ec4b23725c90d3989517ee3fe/system/x86/i2c.c#L624
 def _smbus_process():
     timeout = 0
@@ -193,9 +204,27 @@ def _mem_spd_read_byte(addr, offset):
 def mem_spd_read_byte(slot, offset):
     g_mutex.acquire()
     try:
+        #_smbus_reset()
         return _mem_spd_read_byte(SMBUS_SPD_ADDRESS + slot, offset)
     finally:
         g_mutex.release()
+
+def mem_spd_read_full(slot):
+    buf = b''
+    g_mutex.acquire()
+    try:
+        #_smbus_reset()
+        for offset in range(0, 0x400):
+            val = _mem_spd_read_byte(SMBUS_SPD_ADDRESS + slot, offset)
+            if val is None:
+                break
+            buf += int_encode(val, 1)
+            pass
+        _mem_spd_read_byte(SMBUS_SPD_ADDRESS + slot, 0)
+        _mem_spd_read_byte(SMBUS_SPD_ADDRESS + slot, 0)
+    finally:
+        g_mutex.release()
+    return buf
 
 def _smbus_read_byte(addr, offset):
     port_write_u1(smb_addr + SMBHSTADD, (addr << 1) | I2C_READ)
@@ -209,6 +238,7 @@ def _smbus_read_byte(addr, offset):
 def mem_spd_read_reg(slot, reg, size = 1):
     g_mutex.acquire()
     try:
+        #_smbus_reset()
         offset = reg & 0x7F   # read reg, not SPD page !!!
         val = _smbus_read_byte(SMBUS_SPD_ADDRESS + slot, offset)
         if size == 1:
@@ -339,13 +369,19 @@ if __name__ == "__main__":
     if INF_SEL == 1:  # i3c protocol
         raise RuntimeError('ERROR: i3c protocol not supported!')
 
-    val = mem_spd_read_byte(slot = 0, offset = 0)
-    print(f'SPD[0] = 0x{val:02X}')
-    val = mem_spd_read_byte(slot = 0, offset = 1)
-    print(f'SPD[1] = 0x{val:02X}')
+    sys.exit(0)
+
     val = mem_spd_read_reg(0, SPD5_MR49, 2)  # MR49 + MR50 => TS Current Sensed Temperature
-    print(f'spd[MR49] = 0x{val:04X}  =>  {temp_decode(val)} degC')
+    print(f'spd[0][MR49] = 0x{val:04X}  =>  {temp_decode(val)} degC')
+    val = mem_spd_read_reg(1, SPD5_MR49, 2)  # MR49 + MR50 => TS Current Sensed Temperature
+    print(f'spd[1][MR49] = 0x{val:04X}  =>  {temp_decode(val)} degC')
 
+    #val = mem_spd_read_byte(slot = 0, offset = 0)
+    #print(f'SPD[0][0] = 0x{val:02X}')
+    #val = mem_spd_read_byte(slot = 0, offset = 1)
+    #print(f'SPD[0][1] = 0x{val:02X}')
 
+    spd_data = mem_spd_read_full(0)
+    print(f'SPD[0] = {spd_data.hex()}')
 
 
