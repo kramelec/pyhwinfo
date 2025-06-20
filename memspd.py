@@ -74,6 +74,7 @@ SPD5_MR11  = 0x0B   # I2C Legacy Mode Device Configuration
 SPD5_MR18  = 0x12   # Device Configuration
 SPD5_MR48  = 0x30   # Device Status
 SPD5_MR49  = 0x31   # TS Current Sensed Temperature (two bytes)
+SPD5_MR52  = 0x34   # Hub, Thermal and NVM Error Status
 
 # i801 Hosts Addresses
 SMBHSTSTS   = 0
@@ -112,15 +113,18 @@ SMBHSTCNT_START             = 0x40
 
 # source: S34HTS08AB_E.pdf   Table 82 Register MR11
 # bit3 = 0 => 1 Byte Addressing for SPD5 Hub Device Memory
-def _mem_spd_set_page(slot, page_number, check_status = True):    
-    if page_number < 0 or page_number >= 8:   # DDR5 SPD has 8 pages
+def _mem_spd_set_page(slot, page, check_status = True, ret_status = False):    
+    if page < 0 or page >= 8:   # DDR5 SPD has 8 pages
         raise ValueError()    
-    rc = smbus_write_u2(smb_addr, SMBUS_SPD_ADDRESS + slot, SPD5_MR11, page_number)
+    rc = smbus_write_u2(smb_addr, SMBUS_SPD_ADDRESS + slot, SPD5_MR11, page)
     if not rc:
         return False
-    if not check_status:
+    if not check_status and not ret_status:
         return True
-    status = smbus_read_u1(smb_addr, SMBUS_SPD_ADDRESS + slot, SPD5_MR48)
+    status = smbus_read_u1(smb_addr, SMBUS_SPD_ADDRESS + slot, SPD5_MR48)  # Device status
+    if ret_status:
+        return status
+    status &= 0x7F  # exclude Pending IBI_STATUS = 0x80    # see S34HTS08AB_E.pdf (Table 107)
     return True if status == 0 else False
 
 def _mem_spd_read_reg(slot, reg_offset, set_page = None):
@@ -150,8 +154,11 @@ def mem_spd_read_reg(slot, reg_offset, size = 1):
         g_mutex.release()
     return None
 
-def _mem_spd_get_status(slot):
-    return _mem_spd_read_reg(slot, SPD5_MR48)
+def _mem_spd_get_status(slot, ret_raw = False):
+    status = _mem_spd_read_reg(slot, SPD5_MR48)
+    if not ret_raw:
+        status &= 0x7F  # exclude Pending IBI_STATUS = 0x80    # see S34HTS08AB_E.pdf (Table 107)
+    return status
 
 def _mem_spd_read_byte(slot, offset):
     if offset < 0 or offset >= 0x80:
@@ -317,10 +324,11 @@ if __name__ == "__main__":
     if INF_SEL == 1:  # i3c protocol
         raise RuntimeError('ERROR: i3c protocol not supported!')
 
-    val = mem_spd_read_reg(0, SPD5_MR49, 2)  # MR49 + MR50 => TS Current Sensed Temperature
-    print(f'spd[0][MR49] = 0x{val:04X}  =>  {temp_decode(val)} degC')
-    val = mem_spd_read_reg(1, SPD5_MR49, 2)  # MR49 + MR50 => TS Current Sensed Temperature
-    print(f'spd[1][MR49] = 0x{val:04X}  =>  {temp_decode(val)} degC')
+    for slot in range(0, 4):
+        val = mem_spd_read_reg(slot, SPD5_MR49, 2)  # MR49 + MR50 => TS Current Sensed Temperature
+        if val is None:
+            continue
+        print(f'spd[{slot}][MR49] = 0x{val:04X}  =>  {temp_decode(val)} degC')
 
     spd_data = mem_spd_read_full(0)
     print(f'SPD[0] = {spd_data.hex()}')
