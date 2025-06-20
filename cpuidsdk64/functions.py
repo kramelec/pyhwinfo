@@ -387,7 +387,7 @@ def GetProcessorID(proc_index = 0):
     objptr = get_objptr()
     return func(objptr, proc_index)
 
-def GetProcessorVoltageID(proc_index = 0): 
+def GetProcessorVoltage(proc_index = 0): 
     fname = inspect.currentframe().f_code.co_name
     func = get_sdk_func(fname, CFUNCTYPE(FLOAT, LPVOID, INT))
     objptr = get_objptr()

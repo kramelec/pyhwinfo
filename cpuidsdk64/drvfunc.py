@@ -27,7 +27,7 @@ def ioctl_decode(ioctl, ret_dict = False):
     else:
         return f'DeviceType: 0x{DeviceType:X}, Access: 0x{Access:X}, Function: 0x{Function:X}, Method: 0x{Method:X}'
 
-# ioctl: 9C402480 , 9C402484, 0x9C402488 
+# ioctl: 9C402480 , 9C402484, 0x9C402488
 def port_read(port, size):
     _drv = _get_drv()
     if size == 1:
@@ -197,36 +197,40 @@ def pci_cfg_command(bus, dev, fun, offset):
     resp = pci_cfg_cmd(addr, val)
     return resp >> (8 * (addr & 3))
 
-# ioctl: 0x9C402680
-def port_read_xxx(port, a1, a2, a3):
+# ioctl: 0x9C402680     # for SPD addr = 0x50...0x53
+def smbus_read_u1(port, addr, command, status = 0xBF):
     _drv = _get_drv()
-    inbuf = struct.pack('<IIII', port, a1, a2, a3)
-    # port_write_u1(port, a3);
-    # port_write_u1(port + 4, (a1 << 1) | 1);
-    # port_write_u1(port + 3, a2);
-    buf = DeviceIoControl(_drv, IOCTL(CPUZ_PORT_READ_XXX), inbuf, 16, None)
-    x1, x2, x3, x4 = struct.unpack('<IIII', buf)
-    if x1 == 0:
-        if (x3 & 0xF0) == 0x40:
-            return 4, -1
-        return x1, -1
-    return (x1, x2 & 0xFF)
+    inbuf = struct.pack('<IIII', port, addr, command, status)
+    # port_write_u1(port + SMBHSTSTS, status);
+    # port_write_u1(port + SMBHSTADD, (addr << 1) | I2C_READ);
+    # port_write_u1(port + SMBHSTCMD, command);
+    buf = DeviceIoControl(_drv, IOCTL(CPUZ_SMBUS_READ_1), inbuf, 16, None)
+    ok, val, status, rc = struct.unpack('<IIII', buf)
+    if ok == 1:
+        return val & 0xFF
+    if rc == 0xBB:
+        pass
+    if (status & 0xF0) == 0x40:   # SMBHSTSTS_INUSE_STS = 0x40
+        return b''
+    return None
 
 # ioctl: 0x9C402690
-def port_write_xxx(port, a1, a2, a3, value):
+def smbus_write_u1(port, addr, command, value, status = 0xBF):
     _drv = _get_drv()
-    inbuf = struct.pack('<IIIII', port, a1, a2, a3, value)
-    # port_write_u1(port, a3);
-    # port_write_u1(port + 4, a1 << 1);
-    # port_write_u1(port + 3, a2);
+    inbuf = struct.pack('<IIIII', port, addr, command, status, value)
+    # port_write_u1(port, status);
+    # port_write_u1(port + 4, addr << 1);
+    # port_write_u1(port + 3, command);
     # port_write_u1(port + 5, value);
-    buf = DeviceIoControl(_drv, IOCTL(CPUZ_PORT_WRITE_XXX), inbuf, 8, None)
-    x1, x2 = struct.unpack('<II', buf)
-    if x2 == 0x22222222:
+    buf = DeviceIoControl(_drv, IOCTL(CPUZ_SMBUS_WRITE_1), inbuf, 8, None)
+    ok, rc = struct.unpack('<II', buf)
+    if ok == 1:
+        return True
+    if rc == 0x22222222:
         pass
-    if x2 == 0x33333333:
+    if rc == 0x33333333:
         pass
-    return x1
+    return False
     
 #######################################################
 #  MSR

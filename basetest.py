@@ -54,7 +54,7 @@ def base_test():
     print('GetHyperThreadingStatus:', GetHyperThreadingStatus())
     print('GetVirtualTechnologyStatus:', GetVirtualTechnologyStatus())
     print('GetProcessorID: 0x%X' % GetProcessorID())
-    print('GetProcessorVoltageID:', GetProcessorVoltageID())
+    print('GetProcessorVoltage:', GetProcessorVoltage())
 
     print('GetNorthBridgeVendor:', GetNorthBridgeVendor())
 

@@ -101,7 +101,7 @@ _afunc('GetProcessorExtendedCacheParameters')
 _afunc('GetHyperThreadingStatus')
 _afunc('GetVirtualTechnologyStatus')
 _afunc('GetProcessorID')
-_afunc('GetProcessorVoltageID')
+_afunc('GetProcessorVoltage')
 _afunc('GetNorthBridgeVendor')
 _afunc('GetNorthBridgeModel')
 _afunc('GetNorthBridgeRevision')
@@ -148,8 +148,8 @@ CPUZ_PCI_CFG_READ      = 0x9C0
 CPUZ_PCI_CFG_WRITE     = 0x9C1
 CPUZ_PCI_CFG_CMD       = 0x9C2
 
-CPUZ_PORT_READ_XXX     = 0x9A0
-CPUZ_PORT_WRITE_XXX    = 0x9A4
+CPUZ_SMBUS_READ_1      = 0x9A0
+CPUZ_SMBUS_WRITE_1     = 0x9A4
 
 CPUZ_MSR_READ          = 0x910
 CPUZ_MSR_WRITE         = 0x911
