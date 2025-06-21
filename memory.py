@@ -9,26 +9,10 @@ from types import SimpleNamespace
 import json
 
 from cpuidsdk64 import *
+from hardware import *
 
 # DOC: 13th Generation Intel ® Core™ Processor Datasheet, Volume 2 of 2
 # source: https://cdrdv2-public.intel.com/743846/743846-001.pdf
-
-PCI_VENDOR_ID_INTEL = 0x8086
-PCI_VENDOR_ID_AMD   = 0x7808
-
-INTEL_ALDERLAKE           = 0x97   # 12th gen
-INTEL_ALDERLAKE_L         = 0x9A   # 12th gen
-INTEL_RAPTORLAKE          = 0xB7   # 13th gen + 14th gen
-INTEL_RAPTORLAKE_P        = 0xBA   #
-INTEL_RAPTORLAKE_S        = 0xBF   #
-INTEL_BARTLETTLAKE        = 0xD7   # Raptor Cove
-INTEL_METEORLAKE          = 0xAC   # Redwood Cove / Crestmont
-INTEL_METEORLAKE_L        = 0xAA   #
-INTEL_ARROWLAKE_H         = 0xC5   # Lion Cove / Skymont
-INTEL_ARROWLAKE           = 0xC6
-INTEL_ARROWLAKE_U         = 0xB5
-INTEL_LUNARLAKE_M         = 0xBD   # Lion Cove / Skymont
-INTEL_PANTHERLAKE_L       = 0xCC   # Crestmont
 
 proc_fam = None
 proc_model_id = None
@@ -454,5 +438,5 @@ if __name__ == "__main__":
     out = get_mem_info()
     #print(json.dumps(memory, indent = 4))
     with open('IMC.json', 'w') as file:
-        json.dump(out, file, indent=4)
+        json.dump(out, file, indent = 4)
     
