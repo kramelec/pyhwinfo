@@ -198,11 +198,11 @@ def pci_cfg_command(bus, dev, fun, offset):
     return resp >> (8 * (addr & 3))
 
 # ioctl: 0x9C402680     # for SPD addr = 0x50...0x53
-def smbus_read_u1(port, addr, command, status = 0xBF):
+def smbus_read_u1(port, dev, command, status = 0xBF):
     _drv = _get_drv()
-    inbuf = struct.pack('<IIII', port, addr, command, status)
+    inbuf = struct.pack('<IIII', port, dev, command, status)
     # port_write_u1(port + SMBHSTSTS, status);
-    # port_write_u1(port + SMBHSTADD, (addr << 1) | I2C_READ);
+    # port_write_u1(port + SMBHSTADD, (dev << 1) | I2C_READ);
     # port_write_u1(port + SMBHSTCMD, command);
     buf = DeviceIoControl(_drv, IOCTL(CPUZ_SMBUS_READ_1), inbuf, 16, None)
     ok, val, status, rc = struct.unpack('<IIII', buf)
@@ -215,11 +215,11 @@ def smbus_read_u1(port, addr, command, status = 0xBF):
     return None
 
 # ioctl: 0x9C402690
-def smbus_write_u1(port, addr, command, value, status = 0xBF):
+def smbus_write_u1(port, dev, command, value, status = 0xBF):
     _drv = _get_drv()
-    inbuf = struct.pack('<IIIII', port, addr, command, status, value)
+    inbuf = struct.pack('<IIIII', port, dev, command, status, value)
     # port_write_u1(port, status);
-    # port_write_u1(port + 4, addr << 1);
+    # port_write_u1(port + 4, dev << 1);
     # port_write_u1(port + 3, command);
     # port_write_u1(port + 5, value);
     buf = DeviceIoControl(_drv, IOCTL(CPUZ_SMBUS_WRITE_1), inbuf, 8, None)
@@ -233,11 +233,11 @@ def smbus_write_u1(port, addr, command, value, status = 0xBF):
     return False
 
 # ioctl: 0x9C40269C
-def smbus_write_u2(port, addr, command, value, status = 0xBF):
+def smbus_write_u2(port, dev, command, value, status = 0xBF):
     _drv = _get_drv()
     val_LO = value & 0xFF
     val_HI = (value >> 8) & 0xFF
-    inbuf = struct.pack('<IIIIII', port, addr, command, status, val_LO, val_HI)
+    inbuf = struct.pack('<IIIIII', port, dev, command, status, val_LO, val_HI)
     buf = DeviceIoControl(_drv, IOCTL(CPUZ_SMBUS_WRITE_2), inbuf, 16, None)
     ok, status, vLO, vHI = struct.unpack('<IIII', buf)
     if ok == 1:
