@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import copy
 import struct
 import ctypes as ct
 import ctypes.wintypes as wintypes
@@ -15,9 +16,16 @@ LOCAL_SMBUS_MUTEX_NAME  = r"Local\Access_SMBUS.HTP.Method"
 GLOBAL_SMBUS_MUTEX_NAME = r"Global\Access_SMBUS.HTP.Method"
 
 g_mem_info = None
-smb_addr = None
-smb_vid = None
-smb_ddr_ver = None
+g_mutex = None
+g_smbus = {
+    'port': None,
+    'cfg_addr': None,   # list of [ bus, dev, fun ]
+    'pch_vid': None,
+    'pch_did': None,
+    'pch_name': None,
+    'ddr_ver': None,
+}
+smb_addr = None   # pci I/O port
 
 SMBUS_SPD_DEVICE  = 0x50     # Typical SPD address for first DIMM
 SMBUS_PMIC_DEVICE = 0x48     # ????????
@@ -219,6 +227,7 @@ PMIC_RICHTEK_ADC_LVDO_18V = 0x08   # 1.8V
 PMIC_RICHTEK_ADC_LVDO_10V = 0x09   # 1.0V
 
 def mem_pmic_read(slot):
+    out = { "smbus_dev": SMBUS_PMIC_DEVICE + slot }
     g_mutex.acquire()
     try:
         rc = smbus_read_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, 0)
@@ -229,15 +238,16 @@ def mem_pmic_read(slot):
             rc = smbus_read_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, 0)
             if rc != 0:
                 print('ERROR: PMIC not inited!')
-                return False
+                return None
         vid_LO = smbus_read_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, PMIC_RICHTEK_R3C)  # PMIC Vendor ID
         vid_HI = smbus_read_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, PMIC_RICHTEK_R3C + 1)
         vid = (vid_HI << 8) + vid_LO
         print(f'PMIC Vendor ID = 0x{vid:04X}')
+        out['vid'] = vid
         
         if vid != 0x8C8A:   # Richtek
             print(f'ERROR: pmic 0x{vid:04X} not supported')
-            return None
+            return out
 
         def pmic_read_adc(adc_sel):
             cmd = SETDIM(adc_sel, 4) << 3  # look "ADC Select" in doc DSQ5119A-02.pdf
@@ -247,53 +257,51 @@ def mem_pmic_read(slot):
             value = smbus_read_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, PMIC_RICHTEK_R31)
             return value if state == cmd else None
 
-        def pmic_read_reg_u2(reg):
-            val_LO = pmic_read_adc(reg)
-            if val_LO is not None:
-                val_HI = pmic_read_adc(reg + 1)
-                if val_HI is not None:
-                    value = (val_HI << 8) + val_LO
-                    print(f'pmic[0x{reg:02X}] = 0x{value:04X}')
-                    return value
-            print(f'pmic[{reg:02X}] = ERR')
-            return None
-
         def voltage_decode(val, mult = 0.015):  # look doc: DSQ5119A-02.pdf  page 107  table "R31 - ADC Read"
+            if val is None:
+                return -1
             val = val * mult
             return round(val, 3)
 
         saved_st = smbus_read_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, PMIC_RICHTEK_R30)  # ADC state
         if saved_st is None:
-            return None
+            return out
         print(f'PMIC state = 0x{saved_st:02X} (SAVED)')
         try:
             swa = pmic_read_adc(PMIC_RICHTEK_ADC_SWA)
             swa = voltage_decode(swa)
             print(f'PMIC[SWA] = {swa} V')
+            out['SWA'] = swa
 
             swb = pmic_read_adc(PMIC_RICHTEK_ADC_SWB)
             swb = voltage_decode(swb)
             print(f'PMIC[SWB] = {swb} V')
+            out['SWB'] = swb
 
             swc = pmic_read_adc(PMIC_RICHTEK_ADC_SWC)
             swc = voltage_decode(swc)
             print(f'PMIC[SWC] = {swc} V')
+            out['SWC'] = swc
 
             swd = pmic_read_adc(PMIC_RICHTEK_ADC_SWD)
             swd = voltage_decode(swd)
             print(f'PMIC[SWD] = {swd} V')
+            out['SWD'] = swd
 
             lvdo = pmic_read_adc(PMIC_RICHTEK_ADC_LVDO_18V)
             lvdo = voltage_decode(lvdo)
             print(f'PMIC[LVDO 1.8V] = {lvdo} V')
+            out['1.8V'] = lvdo
 
             lvdo = pmic_read_adc(PMIC_RICHTEK_ADC_LVDO_10V)
             lvdo = voltage_decode(lvdo)
             print(f'PMIC[LVDO 1.0V] = {lvdo} V')
+            out['1.0V'] = lvdo
 
             vin = pmic_read_adc(PMIC_RICHTEK_ADC_VIN_BULK)
             vin = voltage_decode(vin, 0.070)
             print(f'PMIC[VIN] = {vin} V')
+            out['VIN'] = vin
         finally:
             # restore ADC state
             smbus_write_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, PMIC_RICHTEK_R30, saved_st)
@@ -310,9 +318,9 @@ def mem_pmic_read(slot):
         smbus_write_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, 0x1A, x1)
         smbus_write_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, 0x1B, x2)
         '''
-        #return value
     finally:
         g_mutex.release()
+    return out
     
 # =================================================================================================
 
@@ -378,12 +386,21 @@ def temp_decode(val):  # see doc: S34HTS08AB_E.pdf  page 63  table 99  (Thermal 
     temp = SETDIM(val, 10) / 4
     return -temp if sign else temp
 
-if __name__ == "__main__":
-    check_smbus_mutex()
-    SdkInit(None, 0)
+def get_mem_spd_info(slot, mem_info: dict, with_pmic = True):
+    global g_mem_info, g_mutex, g_smbus, smb_addr
+    spd = { }
+    
+    if not g_mutex:
+        check_smbus_mutex()
+        mutex = CreateMutexW(GLOBAL_SMBUS_MUTEX_NAME)
+        if not mutex:
+            raise RuntimeError(f'Cannot open or create global mutex "{GLOBAL_SMBUS_MUTEX_NAME}"')
+        g_mutex = mutex
 
-    g_mem_info = get_mem_info()
-    g_mutex = CreateMutexW(GLOBAL_SMBUS_MUTEX_NAME)
+    if mem_info is None:
+        raise ValueError('Argument mem_info cannot be None!')
+    
+    g_mem_info = copy.deepcopy(mem_info)
 
     cpu = g_mem_info['cpu']
     if cpu['family'] != 6:
@@ -392,56 +409,107 @@ if __name__ == "__main__":
     if cpu['model_id'] < INTEL_ALDERLAKE:
         raise RuntimeError(f'ERROR: Processor model 0x{cpu["model_id"]:X} not supported')
 
-    smbus_dev = find_smb_controller(check_pci_did = True)
-    if not smbus_dev:
-        raise RuntimeError('ERROR: Cannot found PCH with SMBus controller')
-    (vid, did, bus, dev, fun) = smbus_dev
-    if vid == PCI_VENDOR_ID_INTEL:
-        smbus_dev_name = PCI_ID_SMBUS_INTEL[did]
-        print(f'Founded PCH device with SMBus: "{smbus_dev_name}"')
-        print(f'VID = 0x{vid:04X}  DID = 0x{did:04X}  > {bus:02X}:{dev:02X}:{fun:02X}')
+    if not g_smbus['cfg_addr']:
+        smbus_dev = find_smb_controller(check_pci_did = True)
+        if not smbus_dev:
+            raise RuntimeError('ERROR: Cannot found PCH with SMBus controller')
+        (vid, did, bus, dev, fun) = smbus_dev 
     else:
-        raise RuntimeError('ERROR: Currently siupported only Intel platform')
+        vid = g_smbus['pch_vid']
+        did = g_smbus['pch_did']
+        (bus, dev, fun) = tuple(g_smbus['cfg_addr'])
+    
+    if not smb_addr:
+        if vid == PCI_VENDOR_ID_INTEL:
+            smbus_dev_name = PCI_ID_SMBUS_INTEL[did]['name']
+            print(f'Founded PCH device with SMBus: "{smbus_dev_name}"')
+            print(f'VID = 0x{vid:04X}  DID = 0x{did:04X} >>> {bus:02X}:{dev:02X}:{fun:02X}')
+        else:
+            raise RuntimeError('ERROR: Currently siupported only Intel platform')
 
-    smb_vid = vid
-    smb_ddr_ver = g_mem_info['memory']['mc'][0]['info']['DDR_ver']
-    print(f'DDR_ver: {smb_ddr_ver}')
+        g_smbus["ddr_ver"] = g_mem_info['memory']['mc'][0]['info']['DDR_ver']
+        print(f'DDR_ver: {g_smbus["ddr_ver"]}')
 
-    offset = 0x10 + 4 * 4   # BAR4 - SMBus Addr
-    smb_addr = pci_cfg_read(bus, dev, fun, offset, size = '4')
-    if (smb_addr & 1) == 0:
-        raise RuntimeError(f'ERROR: Cannot detect SMBus addr!')
-    smb_addr -= 1
-    print(f'Intel PCH SMBus addr = 0x{smb_addr:X}')
+        offset = 0x10 + 4 * 4   # BAR4 - SMBus Addr
+        smbus_addr = pci_cfg_read(bus, dev, fun, offset, size = '4')
+        if (smbus_addr & 1) == 0:
+            raise RuntimeError(f'ERROR: Cannot detect SMBus addr!')
+        smbus_addr -= 1
+        print(f'Intel PCH SMBus addr = 0x{smbus_addr:X}')
+        smb_addr = smbus_addr
+        g_smbus['cfg_addr'] = [ bus, dev, fun ]
+        g_smbus['pch_vid'] = vid
+        g_smbus['pch_did'] = did
+        g_smbus['pch_name'] = smbus_dev_name
+        g_smbus['port'] = smb_addr
 
-    spd_vid = mem_spd_read_reg(0, SPD5_MR3, 2)  # MR3 + MR4 => Vendor ID
+    spd_vid = mem_spd_read_reg(slot, SPD5_MR3, 2)  # MR3 + MR4 => Vendor ID
+    if not spd_vid:
+        return None
+
+    print(f'Scan DIMM slot #{slot}')
     print(f'SPD Vendor ID = 0x{spd_vid:04X}')
+    spd["smbus_dev"] = SMBUS_SPD_DEVICE + slot
+    spd["spd_vid"] = spd_vid
 
-    val = mem_spd_read_reg(0, SPD5_MR18)  # Device Configuration
+    val = mem_spd_read_reg(slot, SPD5_MR18)  # Device Configuration
     PEC_EN = get_bits(val, 0, 7)
-    print(f'{PEC_EN=}')
+    #print(f'{PEC_EN=}')
     PAR_DIS = get_bits(val, 0, 6)
-    print(f'{PAR_DIS=}')
+    #print(f'{PAR_DIS=}')
     INF_SEL = get_bits(val, 0, 5)
-    print(f'{INF_SEL=}')
+    #print(f'{INF_SEL=}')
     DEF_RD_ADDR_POINT_EN = get_bits(val, 0, 4)
-    print(f'{DEF_RD_ADDR_POINT_EN=}')
+    #print(f'{DEF_RD_ADDR_POINT_EN=}')
     DEF_RD_ADDR_POINT_BL = get_bits(val, 0, 1)
-    print(f'{DEF_RD_ADDR_POINT_BL=}')
+    #print(f'{DEF_RD_ADDR_POINT_BL=}')
     DEF_RD_ADDR_POINT_START = get_bits(val, 0, 2, 3)
-    print(f'{DEF_RD_ADDR_POINT_START=:X}')
+    #print(f'{DEF_RD_ADDR_POINT_START=:X}')
 
     if INF_SEL == 1:  # i3c protocol
         raise RuntimeError('ERROR: i3c protocol not supported!')
 
+    temp = mem_spd_read_reg(slot, SPD5_MR49, 2)  # MR49 + MR50 => TS Current Sensed Temperature
+    if temp is not None:
+        temp = temp_decode(temp)
+        #print(f'spd[{slot}][MR49] = 0x{temp:04X}  =>  {temp} degC')
+        spd['temp'] = temp
+
+    spd_data = mem_spd_read_full(slot)
+    #print(f'SPD[0] = {spd_data.hex()}')
+    if spd_data and len(spd_data) >= 1024:
+        spd['spd_raw'] = spd_data.hex()
+
+    if with_pmic:
+        pmic = mem_pmic_read(slot)
+        spd['PMIC'] = pmic
+        
+    return spd
+
+def get_mem_spd_all(mem_info: dict, with_pmic = True):
+    global g_mem_info, g_mutex, g_smbus, smb_addr
+    if not mem_info:
+        from memory import get_mem_info
+        mem_info = get_mem_info()
+    dimm = { }
+    dimm['SMBus'] = { }
+    dimm['DIMM'] = [ ]
     for slot in range(0, 4):
-        val = mem_spd_read_reg(slot, SPD5_MR49, 2)  # MR49 + MR50 => TS Current Sensed Temperature
-        if val is None:
+        spd = get_mem_spd_info(slot, mem_info, with_pmic = with_pmic)
+        if not spd:
             continue
-        print(f'spd[{slot}][MR49] = 0x{val:04X}  =>  {temp_decode(val)} degC')
+        if not dimm['SMBus']:
+            dimm['SMBus'] = g_smbus.copy()
+        dimm['DIMM'].append(spd)
+    return dimm
 
-    spd_data = mem_spd_read_full(0)
-    print(f'SPD[0] = {spd_data.hex()}')
-
-    mem_pmic_read(0)
-
+if __name__ == "__main__":
+    from memory import get_mem_info
+    SdkInit(None, verbose = 0)
+    dimm = get_mem_spd_all(None, with_pmic = True)
+    with open('DIMM.json', 'w') as file:
+        json.dump(dimm, file, indent = 4)
+    if g_mem_info:
+        with open('IMC.json', 'w') as file:
+            json.dump(g_mem_info, file, indent = 4)
+    
