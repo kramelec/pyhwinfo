@@ -59,7 +59,7 @@ smb_addr = None
 smb_vid = None
 smb_ddr_ver = None
 
-SMBUS_SPD_ADDRESS = 0x50       # Typical SPD address for first DIMM
+SMBUS_SPD_DEVICE  = 0x50     # Typical SPD address for first DIMM
 
 DDR4_VDDQ_OFFSET = 0x0B       # DDR4 VDDQ info offset
 DDR5_VDDQ_OFFSET = 0x0C       # DDR5 VDDQ info offset
@@ -70,6 +70,7 @@ I2C_READ   = 1
 # The SPD5 Hub device has totally 128 volatile registers as shown in Table 72
 # source: https://www.ablic.com/en/doc/datasheet/dimm_serial_eeprom_spd/S34HTS08AB_E.pdf
 SPD5_MR3   = 0x03   # Vendor ID (two bytes)
+SPD5_MR5   = 0x05   # Device Capability
 SPD5_MR11  = 0x0B   # I2C Legacy Mode Device Configuration
 SPD5_MR18  = 0x12   # Device Configuration
 SPD5_MR48  = 0x30   # Device Status
@@ -98,6 +99,8 @@ SMBHSTSTS_DEV_ERR       = 0x04
 SMBHSTSTS_INTR          = 0x02
 SMBHSTSTS_HOST_BUSY     = 0x01
 
+SMBHSTSTS_XXX = 0xFF & (~SMBHSTSTS_INUSE_STS)   # 0xBF : all flags except SMBHSTSTS_INUSE_STS
+
 # i801 Hosts Control register bits
 SMBHSTCNT_QUICK             = 0x00
 SMBHSTCNT_BYTE              = 0x04
@@ -116,23 +119,31 @@ SMBHSTCNT_START             = 0x40
 def _mem_spd_set_page(slot, page, check_status = True, ret_status = False):    
     if page < 0 or page >= 8:   # DDR5 SPD has 8 pages
         raise ValueError()    
-    rc = smbus_write_u2(smb_addr, SMBUS_SPD_ADDRESS + slot, SPD5_MR11, page)
+    rc = smbus_write_u2(smb_addr, SMBUS_SPD_DEVICE + slot, SPD5_MR11, page)
     if not rc:
         return False
     if not check_status and not ret_status:
         return True
-    status = smbus_read_u1(smb_addr, SMBUS_SPD_ADDRESS + slot, SPD5_MR48)  # Device status
+    status = smbus_read_u1(smb_addr, SMBUS_SPD_DEVICE + slot, SPD5_MR48)  # Device status
     if ret_status:
         return status
     status &= 0x7F  # exclude Pending IBI_STATUS = 0x80    # see S34HTS08AB_E.pdf (Table 107)
     return True if status == 0 else False
+
+def _mem_spd_init(slot, page):
+    status = _mem_spd_set_page(slot, page, ret_status = True)
+    if status == False:
+        return -1
+    if (status & 0x80) != 0:
+        print(f'detect Pending IBI_STATUS : status = 0x{status:X}')  # IBI = In Band Interrupt
+    return 0
 
 def _mem_spd_read_reg(slot, reg_offset, set_page = None):
     if set_page is not None:
         rc = _mem_spd_set_page(slot, set_page)
         if not rc:
             return None
-    return smbus_read_u1(smb_addr, SMBUS_SPD_ADDRESS + slot, reg_offset)
+    return smbus_read_u1(smb_addr, SMBUS_SPD_DEVICE + slot, reg_offset)
 
 def mem_spd_read_reg(slot, reg_offset, size = 1):
     g_mutex.acquire()
@@ -163,7 +174,7 @@ def _mem_spd_get_status(slot, ret_raw = False):
 def _mem_spd_read_byte(slot, offset):
     if offset < 0 or offset >= 0x80:
         raise ValueError()
-    return smbus_read_u1(smb_addr, SMBUS_SPD_ADDRESS + slot, offset | 0x80)
+    return smbus_read_u1(smb_addr, SMBUS_SPD_DEVICE + slot, offset | 0x80)
 
 def mem_spd_read_byte(slot, offset):
     if offset < 0 or offset >= 0x400:   # DDR5 SPD of 1024 bytes len
@@ -189,6 +200,8 @@ def mem_spd_read_full(slot):
         for spd_page in range(0, 8):
             rc = _mem_spd_set_page(slot, spd_page)
             if not rc:
+                if spd_page == 0:
+                    return None
                 break
             status = _mem_spd_get_status(slot)
             if status != 0:
@@ -199,7 +212,7 @@ def mem_spd_read_full(slot):
                     break
                 buf += int_encode(val, 1)
         # restore page 0
-        _mem_spd_set_page(slot, 0)
+        _mem_spd_set_page(slot, page = 0)
     finally:
         g_mutex.release()
     return buf
