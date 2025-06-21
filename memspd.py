@@ -60,6 +60,7 @@ smb_vid = None
 smb_ddr_ver = None
 
 SMBUS_SPD_DEVICE  = 0x50     # Typical SPD address for first DIMM
+SMBUS_PMIC_DEVICE = 0x48     # ????????
 
 DDR4_VDDQ_OFFSET = 0x0B       # DDR4 VDDQ info offset
 DDR5_VDDQ_OFFSET = 0x0C       # DDR5 VDDQ info offset
@@ -216,6 +217,145 @@ def mem_spd_read_full(slot):
     finally:
         g_mutex.release()
     return buf
+
+def _mem_pmic_init(slot):
+    rc = _mem_spd_set_page(slot, page = 0)
+    if not rc:
+        return None
+    status = port_read_u1(smb_addr + SMBHSTSTS)
+    if status != 0:
+        print(f'ERROR: PMIC status = 0x{status:X}')
+        return None
+    port_write_u1(smb_addr + SMBHSTSTS, SMBHSTSTS_XXX)  # init SMBus state
+    dev = 0x18   # https://i2cdevices.org/addresses/0x18
+    port_write_u1(smb_addr + SMBHSTADD, (dev << 2) | I2C_READ)  # set SMBUS device
+    cmd = 0x05   # ???????
+    port_write_u1(smb_addr + SMBHSTCMD, cmd)
+    cnt = port_read_u1(smb_addr + SMBHSTCNT)
+    print(f'cnt = 0x{cnt:X}')
+    port_write_u1(smb_addr + SMBHSTCNT, SMBHSTCNT_START + SMBHSTCNT_WORD_DATA)
+    code = port_read_u1(smb_addr + SMBHSTSTS)
+    print(f'CODE = 0x{code:X}')
+    code = port_read_u1(smb_addr + SMBHSTSTS)
+    print(f'CODE = 0x{code:X}')
+    port_write_u1(smb_addr + SMBHSTSTS, code)
+    return code
+
+# source: https://www.richtek.com/assets/product_file/RTQ5119A/DSQ5119A-02.pdf
+PMIC_RICHTEK_R1A = 0x1A  # VIN state    (RW)
+PMIC_RICHTEK_R1B = 0x1B  # VIN state    (RW)
+PMIC_RICHTEK_R30 = 0x30  # ADC state    (RW)     # ADC (Analog to Digital Conversion)
+PMIC_RICHTEK_R31 = 0x31  # ADC Read Out (RO)
+PMIC_RICHTEK_R3C = 0x3C  # Vendor ID (2 bytes)
+
+PMIC_RICHTEK_ADC_ENABLE  = 0x80  # look desc of PMIC_RICHTEK_R30
+
+# source: DSQ5119A-02.pdf   page    Table: "R30 - ADC Enable"
+PMIC_RICHTEK_ADC_SWA      = 0x00
+PMIC_RICHTEK_ADC_SWB      = 0x01
+PMIC_RICHTEK_ADC_SWC      = 0x02
+PMIC_RICHTEK_ADC_SWD      = 0x03
+PMIC_RICHTEK_ADC_VIN_BULK = 0x05
+PMIC_RICHTEK_ADC_VIN_MGMT = 0x06
+PMIC_RICHTEK_ADC_VIN_BIAS = 0x07
+PMIC_RICHTEK_ADC_LVDO_18V = 0x08   # 1.8V
+PMIC_RICHTEK_ADC_LVDO_10V = 0x09   # 1.0V
+
+def mem_pmic_read(slot):
+    g_mutex.acquire()
+    try:
+        rc = smbus_read_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, 0)
+        if rc != 0:
+            g_mutex.release()
+            time.sleep(0.02)
+            g_mutex.acquire()
+            rc = smbus_read_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, 0)
+            if rc != 0:
+                print('ERROR: PMIC not inited!')
+                return False
+        vid_LO = smbus_read_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, PMIC_RICHTEK_R3C)  # PMIC Vendor ID
+        vid_HI = smbus_read_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, PMIC_RICHTEK_R3C + 1)
+        vid = (vid_HI << 8) + vid_LO
+        print(f'PMIC Vendor ID = 0x{vid:04X}')
+        
+        if vid != 0x8C8A:   # Richtek
+            print(f'ERROR: pmic 0x{vid:04X} not supported')
+            return None
+
+        def pmic_read_adc(adc_sel):
+            cmd = SETDIM(adc_sel, 4) << 3  # look "ADC Select" in doc DSQ5119A-02.pdf
+            cmd |= PMIC_RICHTEK_ADC_ENABLE
+            smbus_write_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, PMIC_RICHTEK_R30, cmd)
+            state = smbus_read_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, PMIC_RICHTEK_R30)
+            value = smbus_read_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, PMIC_RICHTEK_R31)
+            return value if state == cmd else None
+
+        def pmic_read_reg_u2(reg):
+            val_LO = pmic_read_adc(reg)
+            if val_LO is not None:
+                val_HI = pmic_read_adc(reg + 1)
+                if val_HI is not None:
+                    value = (val_HI << 8) + val_LO
+                    print(f'pmic[0x{reg:02X}] = 0x{value:04X}')
+                    return value
+            print(f'pmic[{reg:02X}] = ERR')
+            return None
+
+        def voltage_decode(val, mult = 0.015):  # look doc: DSQ5119A-02.pdf  page 107  table "R31 - ADC Read"
+            val = val * mult
+            return round(val, 3)
+
+        saved_st = smbus_read_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, PMIC_RICHTEK_R30)  # ADC state
+        if saved_st is None:
+            return None
+        print(f'PMIC state = 0x{saved_st:02X} (SAVED)')
+        try:
+            swa = pmic_read_adc(PMIC_RICHTEK_ADC_SWA)
+            swa = voltage_decode(swa)
+            print(f'PMIC[SWA] = {swa} V')
+
+            swb = pmic_read_adc(PMIC_RICHTEK_ADC_SWB)
+            swb = voltage_decode(swb)
+            print(f'PMIC[SWB] = {swb} V')
+
+            swc = pmic_read_adc(PMIC_RICHTEK_ADC_SWC)
+            swc = voltage_decode(swc)
+            print(f'PMIC[SWC] = {swc} V')
+
+            swd = pmic_read_adc(PMIC_RICHTEK_ADC_SWD)
+            swd = voltage_decode(swd)
+            print(f'PMIC[SWD] = {swd} V')
+
+            lvdo = pmic_read_adc(PMIC_RICHTEK_ADC_LVDO_18V)
+            lvdo = voltage_decode(lvdo)
+            print(f'PMIC[LVDO 1.8V] = {lvdo} V')
+
+            lvdo = pmic_read_adc(PMIC_RICHTEK_ADC_LVDO_10V)
+            lvdo = voltage_decode(lvdo)
+            print(f'PMIC[LVDO 1.0V] = {lvdo} V')
+
+            vin = pmic_read_adc(PMIC_RICHTEK_ADC_VIN_BULK)
+            vin = voltage_decode(vin, 0.070)
+            print(f'PMIC[VIN] = {vin} V')
+        finally:
+            # restore ADC state
+            smbus_write_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, PMIC_RICHTEK_R30, saved_st)
+            print(f'PMIC state restored (value = 0x{saved_st:02X})')
+        '''
+        x1 = smbus_read_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, 0x1A)
+        x2 = smbus_read_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, 0x1B)
+        smbus_write_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, 0x1A, 0x02)
+        smbus_write_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, 0x1B, 0x45)
+        val_LO = smbus_read_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, 0x1A)
+        val_HI = smbus_read_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, 0x0C)
+        value = (val_HI << 8) + val_LO
+        print(f'pmic[1A_0C] = 0x{val_LO:02X}  0x{val_HI:02X}')
+        smbus_write_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, 0x1A, x1)
+        smbus_write_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, 0x1B, x2)
+        '''
+        #return value
+    finally:
+        g_mutex.release()
     
 # =================================================================================================
 
@@ -346,4 +486,5 @@ if __name__ == "__main__":
     spd_data = mem_spd_read_full(0)
     print(f'SPD[0] = {spd_data.hex()}')
 
+    mem_pmic_read(0)
 
