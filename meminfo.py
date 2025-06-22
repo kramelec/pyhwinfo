@@ -172,7 +172,7 @@ def create_window_memory(mem_info, dimm_info, dimm_id = 0, mc_id = 0, ch_id = 0)
     create_sens_val(sensA, 'VPP', vlist[2], 'V')
     create_sens_val(sensA, 'VIN', VIN, 'V')
 
-    temp = dimm['temp'] if dimm else '???'
+    temp = dimm['temp'] if dimm and 'temp' in dimm else '???'
     
     create_sens_val(sensB, 'Temp', temp, 'C°')
     create_sens_val(sensB, '1.8V', LVDO18, 'V')
