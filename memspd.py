@@ -449,6 +449,7 @@ def get_mem_spd_info(slot, mem_info: dict, with_pmic = True):
 
     print(f'Scan DIMM slot #{slot}')
     print(f'SPD Vendor ID = 0x{spd_vid:04X}')
+    spd["slot"] = slot
     spd["smbus_dev"] = SMBUS_SPD_DEVICE + slot
     spd["spd_vid"] = spd_vid
 

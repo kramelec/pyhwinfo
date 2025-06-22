@@ -8,6 +8,7 @@ import ctypes.wintypes as wintypes
 
 PCI_VENDOR_ID_INTEL = 0x8086
 PCI_VENDOR_ID_AMD   = 0x7808
+VENDOR_ID_RICHTEK   = 0x8C8A  # PMIC on smbus
 
 INTEL_ALDERLAKE           = 0x97   # 12th gen
 INTEL_ALDERLAKE_L         = 0x9A   # 12th gen
