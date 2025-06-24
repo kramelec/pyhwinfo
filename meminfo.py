@@ -2,8 +2,11 @@
 # Copyright (C) 2025 remittor
 #
 
+import sys
 import json
+import types
 import math
+
 import tkinter as tk
 from tkinter import ttk
 
@@ -11,334 +14,635 @@ from hardware import *
 
 __author__ = 'remittor'
 
-def create_window_memory(mem_info, dimm_info, dimm_id = 0, mc_id = 0, ch_id = 0):
-    global g_root, g_win
-    if g_root:
-        root = g_root
-    else:
-        root = tk.Tk()
-        root.title("pyhwinfo v0.1 - memory info")
-        root.resizable(False, False)
+class WinVar(tk.Variable):
+    _default = ""   # Value holder for strings variables
+
+    def __init__(self, value, name = None, root = None):
+        master = root if root else None
+        value = self.value_to_str(value)
+        tk.Variable.__init__(self, master, value, name)
+        if value is not None:
+            self._default = str(value)
+
+    def value_to_str(self, value):
+        if isinstance(value, float) and math.isnan(value):
+            return ''
+        if isinstance(value, float):
+            return str(round(value, 2))
+        return str(value)
+
+    def set(self, value):
+        value = str(value)
+        return self._tk.globalsetvar(self._name, value)
+
+    def get(self):
+        value = self._tk.globalgetvar(self._name)
+        if isinstance(value, str):
+            return value
+        return str(value)
+        
+    @property
+    def value(self): 
+        return self.get()
+
+    @value.setter 
+    def value(self, val): 
+        self.set(val)
+
+class WindowMemory():
+    def __init__(self):
+        self.root = tk.Tk()
+        self.root.title("pyhwinfo v0.1 - memory info")
+        self.root.resizable(False, False)
+        self.init_styles()
+        self.vars = types.SimpleNamespace()
+        self.test = False
+        self.sdk_inited = False
+        self.mem_info = None
+        self.dimm_info = None
+        self.mc_chan_names = [ 'A', 'B', 'C', 'D' ]
+        
+    def init_styles(self):    
         style = ttk.Style()
         style.configure('Title.TLabel', font=('Segoe UI', 10))
+        style.configure("TRadiobutton", font=('Segoe UI', 10))
         style.configure('Section.TLabelframe.Label', font=('Segoe UI', 9))
         style.configure('Value.TLabel', font=('Consolas', 10))
         style.configure('val.TLabel', font=('Consolas', 10), padding=2, background="white", foreground="black", relief="groove", borderwidth=2)
         style.configure('Small.TLabel', font=('Consolas', 8))
+
         style.configure('fixT.TLabel', font=('Fixedsys', 10), padding=2)
         style.configure('fixV.TLabel', font=('Fixedsys', 10), padding=2, background="white", foreground="black", relief="groove", borderwidth=2)
+        style.configure('fixV2.TLabel', font=('Segoe UI', 9), padding=2, background="white", foreground="black", relief="groove", borderwidth=2)
         style.configure('fixA.TLabel', font=('Fixedsys', 8))
-        g_root = root
 
-    if g_win:
-        g_win.destroy()
-        g_win = None
-    
-    mem = None
-    if mem_info:
-        mem = mem_info['memory']
+    def create_window(self):
+        vv = self.vars
+        mem = None
+        if self.mem_info:
+            mem = self.mem_info['memory']
 
-    dimm = None
-    pmic = None
-    if dimm_info:
-        dimm = dimm_info['DIMM'][dimm_id]
-        if 'PMIC' in dimm:
-            pmic = dimm['PMIC']
-    
-    # Main container
-    main_frame = ttk.Frame(root, padding=(10, 5))
-    main_frame.pack(fill=tk.BOTH, expand=True)
-    
-    mboard_frame = ttk.Frame(main_frame)
-    mboard_frame.pack(fill=tk.X, pady=1)
-    ttk.Label(mboard_frame, text="Motherboard:", style='Title.TLabel').pack(side=tk.LEFT, padx = 5, pady = 5)
-    mb_name = '?????????'
-    mb_label = ttk.Label(mboard_frame, text=mb_name, style='Title.TLabel')
-    mb_label.pack(side=tk.LEFT, padx = 5, pady = 5)
-    
-    dimm_frame = ttk.LabelFrame(main_frame, text="DIMM", style='Section.TLabelframe')
-    dimm_frame.pack(fill=tk.X, pady=5)
+        self.dimm_count = 4
 
-    frame1 = ttk.Frame(dimm_frame)
-    frame1.pack(fill=tk.X, pady=1)
-    options = ("DIMM 0", "DIMM 1", "DIMM 3")
-    combobox = ttk.Combobox(frame1, values=options, width = 40)
-    combobox.pack(side=tk.LEFT, padx = 5)
-    combobox.current(0)
-    combobox.pack()
-    dimm_slot = ttk.Label(frame1, text="#0: [MC 0] [CH A] [DIMM 0]", style='Value.TLabel')
-    dimm_slot.pack(side=tk.LEFT, pady = 5)
-    pmic_vendor = '?????????'
-    if pmic:
-        pmic_vid = pmic['vid']
-        if pmic_vid == VENDOR_ID_RICHTEK:
-            pmic_vendor = 'Richtek'
-    dimm_pmic = ttk.Label(dimm_frame, text=f"PMIC5100: {pmic_vendor}", style='Value.TLabel')
-    dimm_pmic.pack(side=tk.LEFT, padx = 5, pady = 5)
-
-    freq_volt_frame = ttk.Frame(main_frame)
-    freq_volt_frame.pack(fill=tk.X, pady=5)
-
-    freq_chan_frame = ttk.Frame(freq_volt_frame)
-    freq_chan_frame.pack(side=tk.LEFT, fill=tk.Y, expand=False, padx=3)
-    
-    # Frequency information
-    freq_frame = ttk.LabelFrame(freq_chan_frame, text="Frequency", style='Section.TLabelframe')
-    freq_frame.pack(side=tk.TOP, fill=tk.Y, expand=False, padx=5)
-
-    def create_freq_col(vlist: list, w, vs: list = None, anchor = 'center'):
-        nonlocal freq_frame
-        col = ttk.Frame(freq_frame)
-        col.pack(side=tk.LEFT, fill=tk.BOTH, expand=False, padx=1)
-        for value in vlist:
-            vstyle = 'fixT.TLabel'
-            if isinstance(value, float) and math.isnan(value):
-                vstyle = 'fixV.TLabel'
-                value = ''
-            elif isinstance(value, int) or isinstance(value, float):
-                vstyle = 'fixV.TLabel'
-                value = str(value)
-            if vs and row in vs:
-                vstyle = 'fixV.TLabel'
-            ttk.Label(col, text=value, style=vstyle, width=w, anchor=anchor).pack(fill=tk.X, pady=1)
+        # Main container
+        main_frame = ttk.Frame(self.root, padding=(10, 5))
+        main_frame.pack(fill=tk.BOTH, expand=True)
         
-    BCLK = mem['BCLK_FREQ'] if mem else '???'
-    QCLK_RATIO = mem['SA']['QCLK_RATIO'] if mem else '???'
-    QCLK_FREQ = mem['SA']['QCLK'] if mem else '???'
-    UCLK_RATIO = mem['SA']['UCLK_RATIO'] if mem else '???'
-    UCLK_FREQ = mem['SA']['UCLK'] if mem else '???'
-    
-    create_freq_col([ "", "MCLK", "UCLK" ], w = 5)
-    create_freq_col([ "Rate", QCLK_RATIO, UCLK_RATIO ], w = 6)
-    create_freq_col([ "", "x", "x" ], w = 1)
-    create_freq_col([ "BCLK", BCLK, BCLK ], w = 7)
-    create_freq_col([ "", "=", "=" ], w = 1)
-    create_freq_col([ "Frequency", QCLK_FREQ, UCLK_FREQ ], w = 10)
-    create_freq_col([ "", "MHz", "MHz" ], w = 4, anchor = tk.W)
-
-    # Channel info
-    channel_frame = ttk.Frame(freq_chan_frame)
-    channel_frame.pack(side=tk.BOTTOM, fill=tk.X, expand=False, pady=(5,0))
-    
-    chan_count = '?'
-    gear_mode = '?'
-    if mem:
-        chan_count = len(mem['mc']) * len(mem['mc'][0]['channels'])
-        chan_count = str(chan_count)
-        gear_mode = str(mem['GEAR'])
-    
-    ttk.Label(channel_frame, text="Channels", width=10, anchor='e').pack(side=tk.LEFT)
-    ttk.Label(channel_frame, text=chan_count, width=2, style='val.TLabel', anchor='center').pack(side=tk.LEFT, padx=1)
-    ttk.Label(channel_frame, text="  ", width=1).pack(side=tk.LEFT)
-    ttk.Label(channel_frame, text="Gear Mode", width=11, anchor='e').pack(side=tk.LEFT)
-    ttk.Label(channel_frame, text=gear_mode, width=2, style='val.TLabel', anchor='center').pack(side=tk.LEFT, padx=1)
-    
-    # Sensors info
-    sens_frame = ttk.LabelFrame(freq_volt_frame, text="DIMM Sensors", style='Section.TLabelframe')
-    sens_frame.pack(fill=tk.BOTH, expand=True, pady=3)
-    
-    sensA = ttk.Frame(sens_frame)
-    sensA.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=8)
-    sensB = ttk.Frame(sens_frame)
-    sensB.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=8)
-    
-    def create_sens_val(sframe, name, value, vt, w = 6):
-        if isinstance(value, float) and math.isnan(value):
-            value = ''
-        elif isinstance(value, float):
-            value = str(round(value, 3))
-        else:
-            value = str(value)
-        frame = ttk.Frame(sframe)
-        frame.pack(fill=tk.X, pady=1)
-        ttk.Label(frame, text=name,  width=w, style='fixT.TLabel', anchor=tk.W).pack(side=tk.LEFT)
-        ttk.Label(frame, text=value, width=7, style='fixV.TLabel', anchor='center').pack(side=tk.LEFT)
-        if vt:
-            ttk.Label(frame, text=vt, width=2, style='Title.TLabel', anchor='w').pack(side=tk.LEFT)
+        mboard_frame = ttk.Frame(main_frame)
+        mboard_frame.pack(fill=tk.X, pady=1)
+        ttk.Label(mboard_frame, text="Motherboard:", style='Title.TLabel').pack(side=tk.LEFT, padx = 5, pady = 5)
+        vv.mb_name = WinVar('?????????')
+        mb_label = ttk.Label(mboard_frame, textvariable=vv.mb_name, style='Title.TLabel')
+        mb_label.pack(side=tk.LEFT, padx = 5, pady = 5)
         
-    VIN = '???'
-    LVDO18 = '???'
-    LVDO10 = '???'
-    vlist = [ '???', '???', '???', '???' ]
-    if pmic:
-        v_id = 0
-        for vname in [ 'SWA', 'SWB', 'SWC', 'SWD' ]:
-            if pmic[vname] is not None and pmic[vname] != 0.0:
-                vlist[v_id] = pmic[vname]
-                v_id += 1
-        VIN = pmic['VIN']
-        LVDO18 = pmic['1.8V']
-        LVDO10 = pmic['1.0V']
-    
-    create_sens_val(sensA, 'VDD', vlist[0], 'V')
-    create_sens_val(sensA, 'VDDQ', vlist[1], 'V')
-    create_sens_val(sensA, 'VPP', vlist[2], 'V')
-    create_sens_val(sensA, 'VIN', VIN, 'V')
-
-    temp = dimm['temp'] if dimm and 'temp' in dimm else '???'
-    
-    create_sens_val(sensB, 'Temp', temp, 'C°')
-    create_sens_val(sensB, '1.8V', LVDO18, 'V')
-    create_sens_val(sensB, '1.0V', LVDO10, 'V')
-    
-    # Main timings section
-    timings_frame = ttk.LabelFrame(main_frame, text="Timings", style='Section.TLabelframe')
-    timings_frame.pack(fill=tk.BOTH, expand=True, pady=5)
-    
-    def create_col_timings(tlist, wn = 8, wv = 5):
-        nonlocal timings_frame
-        col = ttk.Frame(timings_frame)
-        col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=8)
-        for name, value in tlist:
-            _wn = wn
-            _wv = wv
-            if name == 'tREFI':
-                _wn = 6
-                _wv = 7
-            if name == 'RTL':
-                _wn = 3
-                _wv = 12
-            frame = ttk.Frame(col)
+        dimm_frame = ttk.LabelFrame(main_frame, text="DIMM", style='Section.TLabelframe')
+        dimm_frame.pack(fill=tk.X, pady=4)
+        
+        dimm_frame2 = ttk.Frame(dimm_frame)
+        dimm_frame2.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=0, pady=0)
+        
+        vv.dimm_radio = tk.StringVar()
+        vv.pmic_vendor_list = [ ]
+        
+        def create_dimm(dnum, size, model, mc, ch, pmic, w = 0, anchor = 'center'):
+            nonlocal vv, dimm_frame2
+            slot = 'Slot ' + str(dnum)
+            size = f'{size} GB' if size else ''
+            model_t = 'Model' if size else ''
+            model = str(model) if size else ''
+            mc_t = 'MC' if size else ''
+            mc = str(mc) if size else ''
+            ch_t = 'CH' if size else ''
+            ch = str(ch) if size else ''
+            pmic_t = 'PMIC' if size else ''
+            pmic = str(pmic) if size else ''
+            vstyle = 'fixV.TLabel' if size else 'Title.TLabel'
+            vstyle2 = 'fixV2.TLabel' if size else 'Title.TLabel'
+            vstyle3 = 'val.TLabel' if size else 'Title.TLabel'
+            frame = ttk.Frame(dimm_frame2)
             frame.pack(fill=tk.X, pady=1)
-            ttk.Label(frame, text=name,  style='fixT.TLabel', width=_wn, anchor=tk.W).pack(side=tk.LEFT)
-            ttk.Label(frame, text=value, style='fixV.TLabel', width=_wv, anchor='center').pack(side=tk.LEFT)
+            radio_btn = tk.Radiobutton(frame, text=slot, variable=vv.dimm_radio, value=str(dnum), command=self.on_radio_select)
+            radio_btn.pack(side=tk.LEFT)
+            if not size:
+                radio_btn.config(state = tk.DISABLED)
+            pmic_var = WinVar(pmic)
+            vv.pmic_vendor_list.append( pmic_var )
+            ttk.Label(frame, text=size, style=vstyle, width=6, anchor=anchor).pack(side=tk.LEFT)
+            ttk.Label(frame, text=model_t, style='Title.TLabel', width=6, anchor='e').pack(side=tk.LEFT)
+            ttk.Label(frame, text=model, style=vstyle2, width=40, anchor='center').pack(side=tk.LEFT)
+            ttk.Label(frame, text=mc_t, style='Title.TLabel', width=3, anchor='e').pack(side=tk.LEFT)
+            ttk.Label(frame, text=mc, style=vstyle, width=2, anchor=anchor).pack(side=tk.LEFT)
+            ttk.Label(frame, text=ch_t, style='Title.TLabel', width=3, anchor='e').pack(side=tk.LEFT)
+            ttk.Label(frame, text=ch, style=vstyle, width=2, anchor=anchor).pack(side=tk.LEFT)
+            ttk.Label(frame, text=pmic_t, style='Title.TLabel', width=5, anchor='e').pack(side=tk.LEFT)
+            ttk.Label(frame, textvariable=pmic_var, style=vstyle2, width=20, anchor='center').pack(side=tk.LEFT)
+            
+        self.dimm_map = { }
+        dnum = 0
+        for mc in mem['mc']:
+            mc_num = mc['controller']
+            for ch in mc['channels']:
+                ch_num = ch['__channel']
+                ch_name = self.mc_chan_names[ch_num]
+                self.dimm_map[dnum] = { 'mc': mc_num, 'ch': ch_num, 'CH': ch_name, 'size': 0 }
+                dnum += 1
+        
+        first_slot = None
+        for dnum in range(0, self.dimm_count):
+            if dnum not in self.dimm_map:
+                break
+            mc_num = self.dimm_map[dnum]['mc']
+            mc = mem['mc'][mc_num]
+            ch_num = self.dimm_map[dnum]['ch']
+            ch = mc['channels'][ch_num]
+            ch_name = self.mc_chan_names[ch_num]
+            if ch_num == 0:
+                size = ch['Dimm_L_Size']
+            else:
+                size = ch['Dimm_S_Size']
+            model = '????????'
+            pmic_name = '???????'
+            if size and first_slot is None:
+                first_slot = dnum
+                self.current_slot = dnum
+                self.current_mc = mc_num
+                self.current_ch = ch_num
+            create_dimm(dnum, size, model, mc_num, ch_name, pmic_name)
+            self.dimm_map[dnum]['size'] = size
 
-    mctl = None
-    chan = None
-    ch = None
-    if mem:
-        mctl = mem['mc'][mc_id]
-        chan = mctl['channels'][ch_id]
-        ch = chan['info']
-    
-    col_timings = [
-        ( "", "" ),
-        ( "tCL",    ch['tCL']  if ch else '??' ),
-        ( "tRCD",   ch['tRCD'] if ch else '??' ),
-        ( "tRCDwr", ''),
-        ( "tRP",    ch['tRP']  if ch else '??' ),
-        ( "tRAS",   ch['tRAS'] if ch else '??' ),
-        ( "tRC",    ch['tRAS'] + ch['tRP'] if ch else '??' ),
-    ]
-    create_col_timings(col_timings, wn = 7)
-    
-    col_timings = [
-        ( "tCR",    ch['tCR']    if ch else '??' ),
-        ( "tCWL",   ch['tCWL']   if ch else '??' ),
-        ( "tRFC",   ch['tRFC']   if ch else '??' ),
-        ( "tRFC2",  ch['tRFC2']  if ch and 'tRFC2' in ch else '' ),
-        ( "tRFCpb", ch['tRFCpb'] if ch else '??' ),
-        ( "tXSR",   ch['tXSR']   if ch else '??' ),
-        ( "tREFI",  ch['tREFI']  if ch else '??' ),
-    ]
-    create_col_timings(col_timings)
-    
-    col_timings = [
-        ( "tFAW",    ch['tFAW']    if ch else '??' ),
-        ( "tRRD_L",  ch['tRRD_L']  if ch else '??' ),
-        ( "tRRD_S",  ch['tRRD_S']  if ch else '??' ),
-        ( "tRDPRE",  ch['tRDPRE']  if ch else '??' ),
-        ( "tRDPDEN", ch['tRDPDEN'] if ch else '??' ),
-    ]
-    create_col_timings(col_timings)
-    
-    col_timings = [
-        ( "tWR",     ch['tWR']     if ch else '??' ),
-        ( "tWTR_L",  ch['tWTR_L']  if ch else '??' ),
-        ( "tWTR_S",  ch['tWTR_S']  if ch else '??' ),
-        ( "tWRPRE",  ch['tWRPRE']  if ch else '??' ),
-        ( "tWRPDEN", ch['tWRPDEN'] if ch else '??' ),
-        ( "tWTP",    ch['tWTP']    if ch and 'tWTP' in ch else '' ),
-    ]
-    create_col_timings(col_timings)
+        vv.dimm_radio.set(str(first_slot))
+        
+        freq_volt_frame = ttk.Frame(main_frame)
+        freq_volt_frame.pack(fill=tk.X, pady=5)
 
-    RTL = '??/??/??/??'
-    if ch:
+        freq_chan_frame = ttk.Frame(freq_volt_frame)
+        freq_chan_frame.pack(side=tk.LEFT, fill=tk.Y, expand=False, padx=3)
+        
+        # Frequency information
+        freq_frame = ttk.LabelFrame(freq_chan_frame, text="Frequency", style='Section.TLabelframe')
+        freq_frame.pack(side=tk.TOP, fill=tk.Y, expand=False, padx=5)
+
+        def create_freq_col(vlist: list, w, anchor = 'center'):
+            nonlocal freq_frame
+            col = ttk.Frame(freq_frame)
+            col.pack(side=tk.LEFT, fill=tk.BOTH, expand=False, padx=1)
+            for value in vlist:
+                vstyle = 'fixT.TLabel'
+                if isinstance(value, str):
+                    vstyle = 'fixT.TLabel'
+                    ttk.Label(col, text=value, style=vstyle, width=w, anchor=anchor).pack(fill=tk.X, pady=1)
+                else:    
+                    vstyle = 'fixV.TLabel'
+                    ttk.Label(col, textvariable=value, style=vstyle, width=w, anchor=anchor).pack(fill=tk.X, pady=1)
+            
+        vv.BCLK = WinVar('???')
+        vv.MCLK_RATIO = WinVar('??')
+        vv.MCLK_FREQ  = WinVar('???')
+        vv.UCLK_RATIO = WinVar('???')
+        vv.UCLK_FREQ  = WinVar('???')
+        
+        create_freq_col([ "", "MCLK", "UCLK" ], w = 5)
+        create_freq_col([ "Rate", vv.MCLK_RATIO, vv.UCLK_RATIO ], w = 6)
+        create_freq_col([ "", "x", "x" ], w = 1)
+        create_freq_col([ "BCLK", vv.BCLK, vv.BCLK ], w = 7)
+        create_freq_col([ "", "=", "=" ], w = 1)
+        create_freq_col([ "Frequency", vv.MCLK_FREQ, vv.UCLK_FREQ ], w = 10)
+        create_freq_col([ "", "MHz", "MHz" ], w = 4, anchor = tk.W)
+
+        # Channel info
+        channel_frame = ttk.Frame(freq_chan_frame)
+        channel_frame.pack(side=tk.BOTTOM, fill=tk.X, expand=False, pady=(3,0))
+        
+        vv.chan_count = WinVar('?')
+        ttk.Label(channel_frame, text="Channels", width=10, anchor='e').pack(side=tk.LEFT)
+        ttk.Label(channel_frame, textvariable=vv.chan_count, width=2, style='val.TLabel', anchor='center').pack(side=tk.LEFT, padx=1)
+        
+        ttk.Label(channel_frame, text=" ", width=1).pack(side=tk.LEFT)
+
+        vv.gear_mode = WinVar('?')
+        ttk.Label(channel_frame, text="Gear Mode", width=11, anchor='e').pack(side=tk.LEFT)
+        ttk.Label(channel_frame, textvariable=vv.gear_mode, width=2, style='val.TLabel', anchor='center').pack(side=tk.LEFT, padx=1)
+
+        ttk.Label(channel_frame, text=" ", width=2).pack(side=tk.LEFT)
+
+        vv.mem_freq = WinVar('????')
+        ttk.Label(channel_frame, text="Eff Freq", width=8, anchor='e').pack(side=tk.LEFT)
+        ttk.Label(channel_frame, textvariable=vv.mem_freq, width=6, style='fixV.TLabel', anchor='center').pack(side=tk.LEFT, padx=1)
+        ttk.Label(channel_frame, text="MHz", width=5, anchor='w').pack(side=tk.LEFT)
+        
+        # Sensors info
+        sens_frame = ttk.LabelFrame(freq_volt_frame, text="DIMM Sensors", style='Section.TLabelframe')
+        sens_frame.pack(fill=tk.BOTH, expand=True, pady=3)
+        
+        def create_sens_val(sframe, name, value, vt, w = 6):
+            nonlocal vv
+            var = WinVar(value)
+            setattr(vv, 'sens_' + name.replace('.', '_'), var)
+            frame = ttk.Frame(sframe)
+            frame.pack(fill=tk.X, pady=1)
+            ttk.Label(frame, text=name, width=w, style='fixT.TLabel', anchor=tk.W).pack(side=tk.LEFT)
+            ttk.Label(frame, textvariable=var, width=7, style='fixV.TLabel', anchor='center').pack(side=tk.LEFT)
+            if vt:
+                ttk.Label(frame, text=vt, width=2, style='Title.TLabel', anchor='w').pack(side=tk.LEFT)
+            
+        sensA = ttk.Frame(sens_frame)
+        sensA.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=8)
+        create_sens_val(sensA, 'VDD',  '?????', 'V')
+        create_sens_val(sensA, 'VDDQ', '?????', 'V')
+        create_sens_val(sensA, 'VPP',  '?????', 'V')
+        create_sens_val(sensA, 'VIN',  '?????', 'V')
+
+        sensB = ttk.Frame(sens_frame)
+        sensB.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=8)
+        create_sens_val(sensB, 'Temp', '?????', 'C°')
+        create_sens_val(sensB, '1.8V', '?????', 'V')
+        create_sens_val(sensB, '1.0V', '?????', 'V')
+
+        # Mem Cotroller Settings
+        ctrl_frame = ttk.LabelFrame(main_frame, text="MC/PCH Settings", style='Section.TLabelframe')
+        ctrl_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+
+        def create_col_ctrl(elems, wn = 8, wv = 4):
+            nonlocal vv, ctrl_frame
+            col = ttk.Frame(ctrl_frame)
+            col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=4)
+            for name, value in elems:
+                vt = None
+                if value.startswith('@'):
+                    vt = value[1:]
+                    value = '??'
+                if name == '':
+                    var = value
+                else:
+                    var = WinVar(value)
+                    var_name = name
+                    if name == 'VDDQ_TX' and vt == 'A':
+                        var_name += '_ICCMAX'
+                    setattr(vv, var_name, var)
+                frame = ttk.Frame(col)
+                frame.pack(fill=tk.X, pady=1)
+                ttk.Label(frame, text=name, style='fixT.TLabel', width=wn, anchor=tk.W).pack(side=tk.LEFT)
+                ttk.Label(frame, textvariable=var, style='fixV.TLabel', width=wv, anchor='center').pack(side=tk.LEFT)
+                if vt:
+                    ttk.Label(frame, text=vt, width=len(vt)+1, style='Title.TLabel', anchor='w').pack(side=tk.LEFT)
+
+        elems = [
+            ( "DDR_OVERCLOCK", '??' ),
+            ( "TIMING_RUNTIME_OC", '??' ),
+        ]
+        create_col_ctrl(elems, wn = 17)
+        elems = [
+            ( "BCLK_OC", '??' ),
+            ( "OC_ENABLED", '??' ),
+        ]
+        create_col_ctrl(elems, wn = 10)
+        elems = [
+            ( "SA_VOLTAGE", '@V' ),
+            ( "POWER_LIMIT", '??' ),     # On / Off
+        ]
+        create_col_ctrl(elems, wn = 11, wv = 7)
+        elems = [
+            ( "VDDQ_TX", '@V' ),
+            ( "VDDQ_TX", '@A' ),
+        ]
+        create_col_ctrl(elems, wn = 7, wv = 7)
+        
+        # Main timings section
+        timings_frame = ttk.LabelFrame(main_frame, text="Timings", style='Section.TLabelframe')
+        timings_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+
+        def create_mc_ch_combo(col, width = 8):
+            nonlocal vv, mem, timings_frame
+            frame = ttk.Frame(col)
+            frame.pack(fill=tk.X, pady=2)
+            options = [ ]
+            for dnum, elem in self.dimm_map.items():
+                #if not elem['size']:
+                #    continue
+                mc_num = elem['mc']
+                ch_num = elem['ch']
+                ch_name = self.mc_chan_names[ch_num]
+                options.append( f'MC #{mc_num}, CH #{ch_num}' )
+            vv.mc_ch_combobox = ttk.Combobox(frame, values=options, width = width + 3)
+            vv.mc_ch_combobox.pack(side=tk.LEFT, padx = 1)
+            vv.mc_ch_combobox.current(0)
+            vv.mc_ch_combobox.pack()
+            vv.mc_ch_combobox.bind("<<ComboboxSelected>>", self.on_combobox_select)
+        
+        def create_col_timings(tlist, wn = 8, wv = 5):
+            nonlocal vv, timings_frame
+            col = ttk.Frame(timings_frame)
+            col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=8)
+            for name, value in tlist:
+                if name == '__combobox':
+                    create_mc_ch_combo(col, wn + wv)
+                    continue
+                if name == '' or (name != 'RTL' and not name.startswith('t')):
+                    var = value
+                else:
+                    var = WinVar(value)
+                    setattr(vv, name, var)
+                _wn = wn
+                _wv = wv
+                if name == 'tREFI':
+                    _wn = 6
+                    _wv = 7
+                if name == 'RTL':
+                    _wn = 3
+                    _wv = 12
+                frame = ttk.Frame(col)
+                frame.pack(fill=tk.X, pady=1)
+                ttk.Label(frame, text=name, style='fixT.TLabel', width=_wn, anchor=tk.W).pack(side=tk.LEFT)
+                ttk.Label(frame, textvariable=var, style='fixV.TLabel', width=_wv, anchor='center').pack(side=tk.LEFT)
+
+        col_timings = [
+            ( "__combobox", "" ),
+            ( "tCL",    '??' ),
+            ( "tRCD",   '??' ),
+            ( "tRCDwr", ''   ),
+            ( "tRP",    '??' ),
+            ( "tRAS",   '??' ),
+            ( "tRC",    '??' ),
+        ]
+        create_col_timings(col_timings, wn = 7)
+        
+        col_timings = [
+            ( "tCR",    '??' ),
+            ( "tCWL",   '??' ),
+            ( "tRFC",   '??' ),
+            ( "tRFC2",  ''   ),
+            ( "tRFCpb", '??' ),
+            ( "tXSR",   '??' ),
+            ( "tREFI",  '??' ),
+        ]
+        create_col_timings(col_timings)
+        
+        col_timings = [
+            ( "tFAW",    '??' ),
+            ( "tRRD_L",  '??' ),
+            ( "tRRD_S",  '??' ),
+            ( "tRDPRE",  '??' ),
+            ( "tRDPDEN", '??' ),
+        ]
+        create_col_timings(col_timings)
+        
+        col_timings = [
+            ( "tWR",     '??' ),
+            ( "tWTR_L",  '??' ),
+            ( "tWTR_S",  '??' ),
+            ( "tWRPRE",  '??' ),
+            ( "tWRPDEN", '??' ),
+            ( "tWTP",    ''   ),
+        ]
+        create_col_timings(col_timings)
+
+        col_timings = [
+            ( "tCKE",    '??' ),
+            ( "tCPDED",  '??' ),
+            ( "tXP",     '??' ),
+            ( "tXPDLL",  '??' ),
+            ( "tXSDLL",  '??' ),
+            ( "RTL",     '??/??/??/??' ),
+        ]
+        create_col_timings(col_timings, wv = 6)
+        
+        adv_frame = ttk.Frame(main_frame)
+        adv_frame.pack(fill=tk.X, pady=5)
+
+        def create_adv_timings(tlist, caption, wn = 9, wv = 5):
+            nonlocal vv, adv_frame
+            col = ttk.LabelFrame(adv_frame, text=caption, style='Section.TLabelframe')
+            col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=6)
+            for name, value in tlist:
+                if name == '' or not name.startswith('t'):
+                    var = str(value)
+                else:
+                    var = WinVar(value)
+                    setattr(vv, name, var)
+                _wn = wn
+                _wv = wv
+                frame = ttk.Frame(col)
+                frame.pack(fill=tk.X, pady=1)
+                ttk.Label(frame, text=name, style='fixT.TLabel', width=_wn, anchor=tk.W).pack(side=tk.LEFT)
+                ttk.Label(frame, textvariable=var,  style='fixV.TLabel', width=_wv, anchor='center').pack(side=tk.LEFT)
+
+        adv_timings = [
+            ( "tRDRD_sg", '??' ),
+            ( "tRDWR_sg", '??' ),
+            ( "tWRRD_sg", '??' ),
+            ( "tWRWR_sg", '??' ),
+        ]
+        create_adv_timings(adv_timings, "Same Bank Group")
+        adv_timings = [
+            ( "tRDRD_dg", '??' ),
+            ( "tRDWR_dg", '??' ),
+            ( "tWRRD_dg", '??' ),
+            ( "tWRWR_dg", '??' ),
+        ]
+        create_adv_timings(adv_timings, "Different Bank Group")
+        adv_timings = [
+            ( "tRDRD_dr", '??' ),
+            ( "tRDWR_dr", '??' ),
+            ( "tWRRD_dr", '??' ),
+            ( "tWRWR_dr", '??' ),
+        ]
+        create_adv_timings(adv_timings, "Same DIMM")
+        adv_timings = [
+            ( "tRDRD_dd", '??' ),
+            ( "tRDWR_dd", '??' ),
+            ( "tWRRD_dd", '??' ),
+            ( "tWRWR_dd", '??' ),
+        ]
+        create_adv_timings(adv_timings, "Different DIMM")
+        
+        # Refresh button
+        btn_frame = ttk.Frame(main_frame)
+        btn_frame.pack(fill=tk.X, pady=6)
+        btn_refresh = ttk.Button(btn_frame, text="Refresh", command = self.button_click_refresh)
+        btn_refresh.pack(side=tk.RIGHT)
+
+    def update(self, slot = 0, mc_id = None, ch_id = None):
+        vv = self.vars
+        if mc_id is None:
+            mc_id = self.current_mc
+        if ch_id is None:
+            ch_id = self.current_ch
+        cap = self.mem_info['CAP']
+        mem = self.mem_info['memory']
+        dimm = None
+        for elem in self.dimm_info['DIMM']:
+            if elem['slot'] == slot:
+                dimm = elem
+                break
+        if not dimm:
+            raise RuntimeError(f'slot = {slot}')
+        pmic = dimm['PMIC'] if dimm and 'PMIC' in dimm else None
+        #vv.mb_name = 
+        
+        for elem in vv.pmic_vendor_list:
+            elem.set('')
+        
+        for elem in self.dimm_info['DIMM']:
+            slot = elem['slot']
+            if 'PMIC' not in elem:
+                continue
+            pmic = elem['PMIC']
+            if not pmic:
+                continue
+            pmic_vid = pmic['vid']
+            if pmic_vid == VENDOR_ID_RICHTEK:
+                vv.pmic_vendor_list[slot].value = 'Richtek'
+                
+        vv.BCLK.value = mem['BCLK_FREQ']
+        vv.MCLK_RATIO.value = mem['SA']['QCLK_RATIO']
+        vv.MCLK_FREQ.value  = mem['SA']['QCLK']
+        vv.UCLK_RATIO.value = mem['SA']['UCLK_RATIO']
+        vv.UCLK_FREQ.value  = mem['SA']['UCLK']
+        vv.chan_count.value = len(mem['mc']) * len(mem['mc'][0]['channels'])
+        vv.gear_mode.value = mem['GEAR']
+        vv.mem_freq.value = float(vv.MCLK_RATIO.value) * 2
+        if mem['BCLK_FREQ'] > 98 and mem['BCLK_FREQ'] < 105:
+            vv.mem_freq.value = mem['SA']['QCLK_RATIO'] * 100 * 2
+        if pmic:
+            vv.sens_VDD.value = pmic['SWA']
+            vv.sens_VDDQ.value = pmic['SWC']
+            vv.sens_VPP.value = pmic['SWD']
+            vv.sens_VIN.value = pmic['VIN']
+            vv.sens_1_8V.value = pmic['1.8V']
+            vv.sens_1_0V.value = pmic['1.0V']
+        else:
+            vv.sens_VDD.value = ''
+            vv.sens_VDDQ.value = ''
+            vv.sens_VPP.value = ''
+            vv.sens_VIN.value = ''
+            vv.sens_1_8V.value = ''
+            vv.sens_1_0V.value = ''
+        if dimm and 'temp' in dimm:
+            vv.sens_Temp.value = dimm['temp']
+        else:
+            vv.sens_Temp.value = ''
+        vv.DDR_OVERCLOCK.value = 'ON' if cap['DDR_OVERCLOCK'] else 'off'
+        vv.TIMING_RUNTIME_OC.value = 'ON' if mem['MC_TIMING_RUNTIME_OC_ENABLED'] else 'off'
+        vv.BCLK_OC.value = 'ON' if cap['BCLKOCRANGE'] == 3 else 'off'
+        vv.OC_ENABLED.value = 'ON' if cap['OC_ENABLED'] else 'off'
+        vv.SA_VOLTAGE.value = mem['SA']['SA_VOLTAGE']
+        vv.POWER_LIMIT.value = 'ON' if mem['POWER']['limits_LOCKED'] != 0 else 'off'
+        vv.VDDQ_TX.value = mem['REQ_VDDQ_TX_VOLTAGE']
+        vv.VDDQ_TX_ICCMAX.value = mem['REQ_VDDQ_TX_ICCMAX']
+        
+        chan = mem['mc'][mc_id]['channels'][ch_id]
+        ci = chan['info']
+        vv.tCL.value = ci['tCL']
+        vv.tRCD.value = ci['tRCD']
+        vv.tRCDwr.value = ''
+        vv.tRP.value = ci['tRP']
+        vv.tRAS.value = ci['tRAS']
+        vv.tRC.value = ci['tRAS'] + ci['tRP']
+        vv.tCR.value = ci['tCR']
+        vv.tCWL.value = ci['tCWL']
+        vv.tRFC.value = ci['tRFC']
+        vv.tRFC2.value = ''
+        vv.tRFCpb.value = ci['tRFCpb']
+        vv.tXSR.value = ci['tXSR']
+        vv.tREFI.value = ci['tREFI']
+        vv.tFAW.value = ci['tFAW']
+        vv.tRRD_L.value = ci['tRRD_L']
+        vv.tRRD_S.value = ci['tRRD_S']
+        vv.tRDPRE.value = ci['tRDPRE']
+        vv.tRDPDEN.value = ci['tRDPDEN']
+        vv.tWR.value = ci['tWR']
+        vv.tWTR_L.value = ci['tWTR_L']
+        vv.tWTR_S.value = ci['tWTR_S']
+        vv.tWRPRE.value = ci['tWRPRE']
+        vv.tWRPDEN.value = ci['tWRPDEN']
+        vv.tWTP.value = ''
+        vv.tCKE.value = ci['tCKE']
+        vv.tCPDED.value = ci['tCPDED']
+        vv.tXP.value = ci['tXP']
+        vv.tXPDLL.value = ci['tXPDLL']
+        vv.tXSDLL.value = ci['tXSDLL']
         rtl_list = [ '??', '??', '??', '??' ]
-        for key, val in ch.items():
+        for key, val in ci.items():
             if key.startswith('tRTL_'):
                 num = int(key.split('_')[1])
                 rtl_list[num] = str(val)
-        RTL = '/'.join(rtl_list)
+        vv.RTL.value = '/'.join(rtl_list)
 
-    col_timings = [
-        ( "tCKE",    ch['tCKE']    if ch else '??' ),
-        ( "tCPDED",  ch['tCPDED']  if ch else '??' ),
-        ( "tXP",     ch['tXP']     if ch else '??' ),
-        ( "tXPDLL",  ch['tXPDLL']  if ch else '??' ),
-        ( "tXSDLL",  ch['tXSDLL']  if ch else '??' ),
-        ( "RTL", RTL),
-    ]
-    create_col_timings(col_timings, wv = 6)
+        vv.tRDRD_sg.value = ci['tRDRD_sg']
+        vv.tRDWR_sg.value = ci['tRDWR_sg']
+        vv.tWRRD_sg.value = ci['tWRRD_sg']
+        vv.tWRWR_sg.value = ci['tWRWR_sg']
+        vv.tRDRD_dg.value = ci['tRDRD_dg']
+        vv.tRDWR_dg.value = ci['tRDWR_dg']
+        vv.tWRRD_dg.value = ci['tWRRD_dg']
+        vv.tWRWR_dg.value = ci['tWRWR_dg']
+        vv.tRDRD_dr.value = ci['tRDRD_dr']
+        vv.tRDWR_dr.value = ci['tRDWR_dr']
+        vv.tWRRD_dr.value = ci['tWRRD_dr']
+        vv.tWRWR_dr.value = ci['tWRWR_dr']
+        vv.tRDRD_dd.value = ci['tRDRD_dd']
+        vv.tRDWR_dd.value = ci['tRDWR_dd']
+        vv.tWRRD_dd.value = ci['tWRRD_dd']
+        vv.tWRWR_dd.value = ci['tWRWR_dd']
+        
+        self.current_slot = slot
+        self.current_mc = mc_id
+        self.current_ch = ch_id
     
-    adv_frame = ttk.Frame(main_frame)
-    adv_frame.pack(fill=tk.X, pady=5)
+    def refresh(self, update = True):
+        if update:
+            print('Refresh started...')
+        self.update_hardware_info()
+        if update:
+            self.update()
+            print('Main window refreshed!')
 
-    def create_adv_timings(tframe, tlist, caption, wn = 9, wv = 5):
-        col = ttk.LabelFrame(tframe, text=caption, style='Section.TLabelframe')
-        col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=6)
-        for name, value in tlist:
-            value = str(value)
-            _wn = wn
-            _wv = wv
-            frame = ttk.Frame(col)
-            frame.pack(fill=tk.X, pady=1)
-            ttk.Label(frame, text=name,  style='fixT.TLabel', width=_wn, anchor=tk.W).pack(side=tk.LEFT)
-            ttk.Label(frame, text=value, style='fixV.TLabel', width=_wv, anchor='center').pack(side=tk.LEFT)
-
-    adv_timings = [
-        ( "tRDRD_sg", ch['tRDRD_sg'] if ch else '??' ),
-        ( "tRDWR_sg", ch['tRDWR_sg'] if ch else '??' ),
-        ( "tWRRD_sg", ch['tWRRD_sg'] if ch else '??' ),
-        ( "tWRWR_sg", ch['tWRWR_sg'] if ch else '??' ),
-    ]
-    create_adv_timings(adv_frame, adv_timings, "Same Bank Group")
-    adv_timings = [
-        ( "tRDRD_dg", ch['tRDRD_dg'] if ch else '??' ),
-        ( "tRDWR_dg", ch['tRDWR_dg'] if ch else '??' ),
-        ( "tWRRD_dg", ch['tWRRD_dg'] if ch else '??' ),
-        ( "tWRWR_dg", ch['tWRWR_dg'] if ch else '??' ),
-    ]
-    create_adv_timings(adv_frame, adv_timings, "Different Bank Group")
-    adv_timings = [
-        ( "tRDRD_dr", ch['tRDRD_dr'] if ch else '??' ),
-        ( "tRDWR_dr", ch['tRDWR_dr'] if ch else '??' ),
-        ( "tWRRD_dr", ch['tWRRD_dr'] if ch else '??' ),
-        ( "tWRWR_dr", ch['tWRWR_dr'] if ch else '??' ),
-    ]
-    create_adv_timings(adv_frame, adv_timings, "Same DIMM")
-    adv_timings = [
-        ( "tRDRD_dd", ch['tRDRD_dd'] if ch else '??' ),
-        ( "tRDWR_dd", ch['tRDWR_dd'] if ch else '??' ),
-        ( "tWRRD_dd", ch['tWRRD_dd'] if ch else '??' ),
-        ( "tWRWR_dd", ch['tWRWR_dd'] if ch else '??' ),
-    ]
-    create_adv_timings(adv_frame, adv_timings, "Different DIMM")
+    def update_hardware_info(self):
+        if self.test:
+            with open('IMC.json', 'r', encoding='utf-8') as file:
+                self.mem_info = json.load(file)
+            with open('DIMM.json', 'r', encoding='utf-8') as file:
+                self.dimm_info = json.load(file)
+        else:
+            from cpuidsdk64 import SdkInit
+            from memory import get_mem_info
+            from memspd import get_mem_spd_all
+            if not self.sdk_inited:
+                SdkInit(None, verbose = 0)
+                self.sdk_inited = True
+            self.mem_info = get_mem_info()
+            self.dimm_info = get_mem_spd_all(self.mem_info, with_pmic = True)
     
-    # Refresh button
-    btn_frame = ttk.Frame(main_frame)
-    btn_frame.pack(fill=tk.X, pady=6)
-    btn_refresh = ttk.Button(btn_frame, text="Refresh", command = button_click_refresh)
-    btn_refresh.pack(side=tk.RIGHT)
-    
-    g_win = main_frame
-    return g_root
+    def button_click_refresh(self):
+        print("Button refresh clicked!")
+        self.refresh()
 
-def button_click_refresh():
-    print("Button refresh clicked!")
-    mem_info = get_mem_info()
-    dimm_info = get_mem_spd_all(mem_info, with_pmic = True)
-    create_window_memory(mem_info, dimm_info)
-    print('Main window recreated!')
+    def on_radio_select(self):
+        vv = self.vars
+        slot = vv.dimm_radio.get()
+        print(f"You selected DIMM: {slot}")
+        self.update(slot = int(slot))
+        
+    def on_combobox_select(self, event):
+        vv = self.vars
+        selected_value = vv.mc_ch_combobox.get()
+        print(f"You selected: {selected_value}")
+        xx = selected_value.split(',')
+        mc_num = int(xx[0].split('#')[1].strip())
+        ch_num = int(xx[1].split('#')[1].strip())
+        self.update(slot = self.current_slot, mc_id = mc_num, ch_id = ch_num)
 
 if __name__ == "__main__":
-    from cpuidsdk64 import SdkInit
-    from memory import get_mem_info
-    from memspd import get_mem_spd_all
-    SdkInit(None, verbose = 0)
-    mem_info = get_mem_info()
-    dimm_info = get_mem_spd_all(mem_info, with_pmic = True)
-    root = create_window_memory(mem_info, dimm_info)
-    root.mainloop()
+    test = False
+    if len(sys.argv) > 1:
+        if sys.argv[1] == 'test':
+            test = True
 
+    win = WindowMemory()
+    win.test = test
+    win.update_hardware_info()
+    win.create_window()
+    win.update()
+
+    win.root.mainloop()
 
