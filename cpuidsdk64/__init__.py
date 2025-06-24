@@ -1,3 +1,7 @@
+#
+# Copyright (C) 2025 remittor
+#
+
 import os
 import sys
 import inspect
@@ -7,6 +11,8 @@ import ctypes
 from ctypes.wintypes import *
 from ctypes import byref
 from ctypes import CFUNCTYPE
+
+__author__ = 'remittor'
 
 from .win32 import *
 

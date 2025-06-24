@@ -1,3 +1,7 @@
+#
+# Copyright (C) 2025 remittor
+#
+
 import json
 import math
 import tkinter as tk
@@ -5,8 +9,7 @@ from tkinter import ttk
 
 from hardware import *
 
-g_root = None
-g_win = None
+__author__ = 'remittor'
 
 def create_window_memory(mem_info, dimm_info, dimm_id = 0, mc_id = 0, ch_id = 0):
     global g_root, g_win

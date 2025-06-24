@@ -1,9 +1,12 @@
+#
+# Copyright (C) 2025 remittor
+#
+
 import ctypes
 from ctypes.wintypes import *
 from ctypes import CFUNCTYPE
 
 from .win32 import *
-
 
 #####################################/
 #   Error codes

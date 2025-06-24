@@ -1,3 +1,7 @@
+#
+# Copyright (C) 2025 remittor
+#
+
 import os
 import sys
 import time
@@ -8,6 +12,8 @@ import ctypes.wintypes as wintypes
 from ctypes import byref
 from types import SimpleNamespace
 import json
+
+__author__ = 'remittor'
 
 from cpuidsdk64 import *
 from hardware import *

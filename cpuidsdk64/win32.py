@@ -1,3 +1,7 @@
+#
+# Copyright (C) 2025 remittor
+#
+
 import os
 import sys
 import atexit
@@ -7,6 +11,8 @@ from ctypes import CFUNCTYPE, POINTER
 from ctypes import byref
 from types import SimpleNamespace
 import struct
+
+__author__ = 'remittor'
 
 INT64 = LARGE_INTEGER
 UINT64 = ULARGE_INTEGER
