@@ -57,7 +57,7 @@ def SdkInit(cfg = None, verbose = 0):
         CreateInstance(verbose = verbose)
     func = get_sdk_func('SdkInit', CFUNCTYPE(BOOL, LPVOID, LPCSTR, LPCSTR, INT, LPINT, LPINT))
     objptr = get_objptr()
-    szDllPath = _sdk_base_dir.encode('latin_1') + b'\0'
+    szDllPath = None  # for using current directory
     szDllFilename = b'cpuidsdk64.dll\0'
     if cfg is None:
         config_flag = CPUIDSDK_CONFIG_USE_SOFTWARE + CPUIDSDK_CONFIG_USE_PROCESSOR
@@ -68,7 +68,12 @@ def SdkInit(cfg = None, verbose = 0):
     errorcode = INT(0)
     extended_errorcode = INT(0)
     print(f'Initialization of cpuidsdk64.dll and cpuz.sys ...')
-    rc = func(objptr, szDllPath, szDllFilename, config_flag, byref(errorcode), byref(extended_errorcode))
+    curdir = os.getcwd()
+    try:
+        os.chdir(_sdk_base_dir)
+        rc = func(objptr, szDllPath, szDllFilename, config_flag, byref(errorcode), byref(extended_errorcode))
+    finally:
+        os.chdir(curdir)
     print('SdkInit =', rc, ' errorcode =', errorcode.value, ' code =', extended_errorcode.value)
     if rc != 1:
         if errorcode.value == CPUIDSDK_ERROR_DRIVER:
