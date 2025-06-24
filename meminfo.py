@@ -383,6 +383,8 @@ class WindowMemory():
             ( "tRRD_S",  '??' ),
             ( "tRDPRE",  '??' ),
             ( "tRDPDEN", '??' ),
+            ( "tRTP",    '??' ),
+            ( "tREFIx9", '??' ),
         ]
         create_col_timings(col_timings)
         
@@ -393,6 +395,7 @@ class WindowMemory():
             ( "tWRPRE",  '??' ),
             ( "tWRPDEN", '??' ),
             ( "tWTP",    ''   ),
+            ( "tREFSBRD", '??' ),
         ]
         create_col_timings(col_timings)
 
@@ -402,6 +405,7 @@ class WindowMemory():
             ( "tXP",     '??' ),
             ( "tXPDLL",  '??' ),
             ( "tXSDLL",  '??' ),
+            ( "tPPD",    ''   ),
             ( "RTL",     '??/??/??/??' ),
         ]
         create_col_timings(col_timings, wv = 6)
@@ -550,17 +554,21 @@ class WindowMemory():
         vv.tRRD_S.value = ci['tRRD_S']
         vv.tRDPRE.value = ci['tRDPRE']
         vv.tRDPDEN.value = ci['tRDPDEN']
+        vv.tRTP.value = ci['tRTP']
+        vv.tREFIx9.value = ci['tREFIx9']
         vv.tWR.value = ci['tWR']
         vv.tWTR_L.value = ci['tWTR_L']
         vv.tWTR_S.value = ci['tWTR_S']
         vv.tWRPRE.value = ci['tWRPRE']
         vv.tWRPDEN.value = ci['tWRPDEN']
         vv.tWTP.value = ''
+        vv.tREFSBRD.value = ci['tREFSBRD']
         vv.tCKE.value = ci['tCKE']
         vv.tCPDED.value = ci['tCPDED']
         vv.tXP.value = ci['tXP']
         vv.tXPDLL.value = ci['tXPDLL']
         vv.tXSDLL.value = ci['tXSDLL']
+        vv.tPPD.value = ci['tPPD']
         rtl_list = [ '??', '??', '??', '??' ]
         for key, val in ci.items():
             if key.startswith('tRTL_'):
