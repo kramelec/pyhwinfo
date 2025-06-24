@@ -14,6 +14,8 @@ from hardware import *
 
 __author__ = 'remittor'
 
+win_caption = "pyhwinfo v0.2 - memory info"
+
 class WinVar(tk.Variable):
     _default = ""   # Value holder for strings variables
 
@@ -51,8 +53,9 @@ class WinVar(tk.Variable):
 
 class WindowMemory():
     def __init__(self):
+        global win_caption
         self.root = tk.Tk()
-        self.root.title("pyhwinfo v0.1 - memory info")
+        self.root.title(win_caption)
         self.root.resizable(False, False)
         self.init_styles()
         self.vars = types.SimpleNamespace()
@@ -92,6 +95,9 @@ class WindowMemory():
         mboard_frame.pack(fill=tk.X, pady=1)
         ttk.Label(mboard_frame, text="Motherboard:", style='Title.TLabel').pack(side=tk.LEFT, padx = 5, pady = 5)
         vv.mb_name = WinVar('?????????')
+        if False:
+            mb = get_motherboard_info()
+            vv.mb_name.value = mb['manufacturer'] + ' ' + mb['product']
         mb_label = ttk.Label(mboard_frame, textvariable=vv.mb_name, style='Title.TLabel')
         mb_label.pack(side=tk.LEFT, padx = 5, pady = 5)
         
@@ -102,6 +108,7 @@ class WindowMemory():
         dimm_frame2.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=0, pady=0)
         
         vv.dimm_radio = tk.StringVar()
+        vv.dram_model_list = [ ]
         vv.pmic_vendor_list = [ ]
         
         def create_dimm(dnum, size, model, mc, ch, pmic, w = 0, anchor = 'center'):
@@ -125,11 +132,13 @@ class WindowMemory():
             radio_btn.pack(side=tk.LEFT)
             if not size:
                 radio_btn.config(state = tk.DISABLED)
+            dram_var = WinVar(model)
+            vv.dram_model_list.append( dram_var )
             pmic_var = WinVar(pmic)
             vv.pmic_vendor_list.append( pmic_var )
             ttk.Label(frame, text=size, style=vstyle, width=6, anchor=anchor).pack(side=tk.LEFT)
             ttk.Label(frame, text=model_t, style='Title.TLabel', width=6, anchor='e').pack(side=tk.LEFT)
-            ttk.Label(frame, text=model, style=vstyle2, width=40, anchor='center').pack(side=tk.LEFT)
+            ttk.Label(frame, textvariable=dram_var, style=vstyle2, width=40, anchor='center').pack(side=tk.LEFT)
             ttk.Label(frame, text=mc_t, style='Title.TLabel', width=3, anchor='e').pack(side=tk.LEFT)
             ttk.Label(frame, text=mc, style=vstyle, width=2, anchor=anchor).pack(side=tk.LEFT)
             ttk.Label(frame, text=ch_t, style='Title.TLabel', width=3, anchor='e').pack(side=tk.LEFT)
@@ -465,8 +474,10 @@ class WindowMemory():
         btn_refresh = ttk.Button(btn_frame, text="Refresh", command = self.button_click_refresh)
         btn_refresh.pack(side=tk.RIGHT)
 
-    def update(self, slot = 0, mc_id = None, ch_id = None):
+    def update(self, slot = None, mc_id = None, ch_id = None):
         vv = self.vars
+        if slot is None:
+            slot = self.current_slot
         if mc_id is None:
             mc_id = self.current_mc
         if ch_id is None:
@@ -478,24 +489,32 @@ class WindowMemory():
             if elem['slot'] == slot:
                 dimm = elem
                 break
+        
         if not dimm:
             raise RuntimeError(f'slot = {slot}')
+        
         pmic = dimm['PMIC'] if dimm and 'PMIC' in dimm else None
-        #vv.mb_name = 
+        
+        board = self.mem_info['board']
+        vv.mb_name.value = board['manufacturer'] + ' ' + board['product']
+
+        for elem in vv.dram_model_list:
+            elem.set('')
         
         for elem in vv.pmic_vendor_list:
             elem.set('')
         
         for elem in self.dimm_info['DIMM']:
             slot = elem['slot']
-            if 'PMIC' not in elem:
-                continue
-            pmic = elem['PMIC']
-            if not pmic:
-                continue
-            pmic_vid = pmic['vid']
-            if pmic_vid == VENDOR_ID_RICHTEK:
-                vv.pmic_vendor_list[slot].value = 'Richtek'
+            if 'spd_eeprom' in elem:
+                from spd_eeprom import spd_eeprom_decode
+                spd = spd_eeprom_decode(elem['spd_eeprom'])
+                elem['SPD'] = spd
+                vv.dram_model_list[slot].value = spd['part_number']
+            if 'PMIC' in elem and elem['PMIC']:
+                pmic_vid = elem['PMIC']['vid']
+                if pmic_vid == VENDOR_ID_RICHTEK:
+                    vv.pmic_vendor_list[slot].value = 'Richtek'
                 
         vv.BCLK.value = mem['BCLK_FREQ']
         vv.MCLK_RATIO.value = mem['SA']['QCLK_RATIO']
@@ -629,6 +648,7 @@ class WindowMemory():
         vv = self.vars
         slot = vv.dimm_radio.get()
         print(f"You selected DIMM: {slot}")
+        self.current_slot = int(slot)
         self.update(slot = int(slot))
         
     def on_combobox_select(self, event):

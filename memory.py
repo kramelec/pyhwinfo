@@ -267,6 +267,7 @@ def get_mem_info():
 
     gdict = { }
     cpu = gdict['cpu'] = { }
+    board = gdict['board'] = { }
     cpu['family'] = proc_fam
     cpu['model_id'] = proc_model_id
     
@@ -432,6 +433,11 @@ def get_mem_info():
     mi['MDLL_ON_DE'] = get_bits(data, 0, 15, 15)
     
     # BCLKOCRANGE
+
+    if True:
+        mb = get_motherboard_info()
+        board['manufacturer'] = mb['manufacturer']
+        board['product'] = mb['product']
 
     mc = gdict['memory']['mc'] = [ ]
     for ctrl_num in range(0, 2):

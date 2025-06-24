@@ -485,7 +485,7 @@ def get_mem_spd_info(slot, mem_info: dict, with_pmic = True):
     spd_data = mem_spd_read_full(slot)
     #print(f'SPD[0] = {spd_data.hex()}')
     if spd_data and len(spd_data) >= 1024:
-        spd['spd_raw'] = spd_data.hex()
+        spd['spd_eeprom'] = spd_data.hex()
 
     if with_pmic:
         pmic = mem_pmic_read(slot)

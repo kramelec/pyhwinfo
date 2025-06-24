@@ -508,3 +508,18 @@ def DeviceIoControl(hDevice, ioctl, inbuf, outbufsize, dummy = None):
         return b''
     return bytes(ctypes.cast(lpOutBuffer, ctypes.POINTER(ctypes.c_ubyte * bytesReturned.value)).contents)
 
+def exec_command(cmd):
+    import subprocess
+    res = subprocess.run(cmd, capture_output=True, text=True, check=True, shell=True)
+    return res.stdout.replace('\r\n', '\n').replace('\n\n', '\n')
+
+def get_motherboard_info():
+    import subprocess
+    out = { }
+    res = exec_command( [ 'wmic', 'baseboard', 'get', 'manufacturer' ] )
+    lines = res.split('\n')
+    out['manufacturer'] = lines[1].strip() if len(lines) > 1 else None
+    res = exec_command( [ 'wmic', 'baseboard', 'get', 'product' ] )
+    lines = res.split('\n')
+    out['product'] = lines[1].strip() if len(lines) > 1 else None
+    return out
