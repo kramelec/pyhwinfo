@@ -500,8 +500,10 @@ class WindowMemory():
         for elem in vv.pmic_vendor_list:
             elem.set('')
         
+        slot_count = 0
         for elem in self.dimm_info['DIMM']:
             slot = elem['slot']
+            slot_count += 1
             if 'spd_eeprom' in elem:
                 from spd_eeprom import spd_eeprom_decode
                 spd = spd_eeprom_decode(elem['spd_eeprom'])
@@ -524,7 +526,19 @@ class WindowMemory():
         vv.MCLK_FREQ.value  = mem['SA']['QCLK']
         vv.UCLK_RATIO.value = mem['SA']['UCLK_RATIO']
         vv.UCLK_FREQ.value  = mem['SA']['UCLK']
-        vv.chan_count.value = len(mem['mc']) * len(mem['mc'][0]['channels'])
+        if mem['mc'][0]['info']['DDR_ver'] == 5:
+            max_chan_count = len(mem['mc']) * len(mem['mc'][0]['channels'])
+            chan_count = 0
+            for mc in mem['mc']:
+                for ch in mc['channels']:
+                    if ch['Dimm_L_Size'] > 0 or ch['Dimm_S_Size'] > 0:
+                        chan_count += 1
+            if chan_count > max_chan_count:
+                chan_count = max_chan_count
+            vv.chan_count.value = chan_count
+        else:
+            vv.chan_count.value = '?'
+        
         vv.gear_mode.value = mem['GEAR']
         vv.mem_freq.value = float(vv.MCLK_RATIO.value) * 2
         if mem['BCLK_FREQ'] > 98 and mem['BCLK_FREQ'] < 105:
