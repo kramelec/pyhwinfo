@@ -1,3 +1,7 @@
+#
+# Copyright (C) 2025 remittor
+#
+
 import os
 import sys
 import json
@@ -99,6 +103,9 @@ def spd_eeprom_decode(data):
         pmic['vendorid'] = get_bits(data, x, 0, 15)
         pmic['dev_type'] = get_bits(data, x+2, 0, 7)
         pmic['dev_rev']  = get_bits(data, x+3, 0, 7)
+
+    out['ranks'] = get_bits(data, 234, 3, 5) + 1
+    out['rank_mix'] = 'asymmetrical' if get_bits(data, 234, 6) else 'symmetrical'
     
     out['vendorid'] = get_bits(data, 512, 0, 15)
     out['manuf_date'] = get_bits(data, 515, 0, 15)

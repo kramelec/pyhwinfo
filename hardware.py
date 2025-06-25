@@ -24,7 +24,7 @@ INTEL_ARROWLAKE_U         = 0xB5
 INTEL_LUNARLAKE_M         = 0xBD   # Lion Cove / Skymont
 INTEL_PANTHERLAKE_L       = 0xCC   # Crestmont
 
-# https://github.com/torvalds/linux/blob/fb4d33ab452ea254e2c319bac5703d1b56d895bf/drivers/i2c/busses/i2c-i801.c#L240
+# ref: https://github.com/torvalds/linux/blob/fb4d33ab452ea254e2c319bac5703d1b56d895bf/drivers/i2c/busses/i2c-i801.c#L240
 PCI_ID_SMBUS_INTEL = {
     0x31d4: {'name': 'INTEL_GEMINILAKE_SMBUS' },
     0x34a3: {'name': 'INTEL_ICELAKE_LP_SMBUS' },
@@ -64,4 +64,23 @@ PCI_ID_SMBUS_INTEL = {
     0xe422: {'name': 'INTEL_PANTHER_LAKE_P_SMBUS' },
 }
 
+# ref: https://github.com/coreboot/coreboot/blob/a60c5d205bf70af00ed2f5075079fd0c2f9aadc3/util/spdtool/spdtool.py#L58
+DRAM_VENDOR_ID_DICT = {
+    0x2c80: { 'name': "Crucial/Micron" },
+    0x4304: { 'name': "Ramaxel" },
+    0x4f01: { 'name': "Transcend" },
+    0x9801: { 'name': "Kingston" },
+    0x987f: { 'name': "Hynix" },
+    0x9e02: { 'name': "Corsair" },
+    0xb004: { 'name': "OCZ" },
+    0xad80: { 'name': "Hynix/Hyundai" },
+    0xb502: { 'name': "SuperTalent" },
+    0xcd04: { 'name': "GSkill" },
+    0xce80: { 'name': "Samsung" },
+    0xfe02: { 'name': "Elpida" },
+    0xff2c: { 'name': "Micron" },
+}
 
+PMIC_VENDOR_ID_DICT = {
+    0x8C8A: { 'name': "Richtek" },
+}

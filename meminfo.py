@@ -226,18 +226,14 @@ class WindowMemory():
         ttk.Label(channel_frame, text="Channels", width=10, anchor='e').pack(side=tk.LEFT)
         ttk.Label(channel_frame, textvariable=vv.chan_count, width=2, style='val.TLabel', anchor='center').pack(side=tk.LEFT, padx=1)
         
-        ttk.Label(channel_frame, text=" ", width=1).pack(side=tk.LEFT)
-
         vv.gear_mode = WinVar('?')
         ttk.Label(channel_frame, text="Gear Mode", width=11, anchor='e').pack(side=tk.LEFT)
         ttk.Label(channel_frame, textvariable=vv.gear_mode, width=2, style='val.TLabel', anchor='center').pack(side=tk.LEFT, padx=1)
 
-        ttk.Label(channel_frame, text=" ", width=2).pack(side=tk.LEFT)
-
         vv.mem_freq = WinVar('????')
-        ttk.Label(channel_frame, text="Eff Freq", width=8, anchor='e').pack(side=tk.LEFT)
+        ttk.Label(channel_frame, text="Speed", width=7, anchor='e').pack(side=tk.LEFT)
         ttk.Label(channel_frame, textvariable=vv.mem_freq, width=6, style='fixV.TLabel', anchor='center').pack(side=tk.LEFT, padx=1)
-        ttk.Label(channel_frame, text="MHz", width=5, anchor='w').pack(side=tk.LEFT)
+        ttk.Label(channel_frame, text="MT/s", width=5, anchor='w').pack(side=tk.LEFT)
         
         # Sensors info
         sens_frame = ttk.LabelFrame(freq_volt_frame, text="DIMM Sensors", style='Section.TLabelframe')
@@ -263,7 +259,7 @@ class WindowMemory():
 
         sensB = ttk.Frame(sens_frame)
         sensB.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=8)
-        create_sens_val(sensB, 'Temp', '?????', 'C°')
+        create_sens_val(sensB, 'Temp', '?????', '°C')
         create_sens_val(sensB, '1.8V', '?????', 'V')
         create_sens_val(sensB, '1.0V', '?????', 'V')
 
@@ -510,11 +506,18 @@ class WindowMemory():
                 from spd_eeprom import spd_eeprom_decode
                 spd = spd_eeprom_decode(elem['spd_eeprom'])
                 elem['SPD'] = spd
-                vv.dram_model_list[slot].value = spd['part_number']
+                vid = spd['vendorid']
+                vendor = '0x%04X' % vid
+                if vid in DRAM_VENDOR_ID_DICT: 
+                    vendor = DRAM_VENDOR_ID_DICT[vid]['name']
+                ranks = '  (' + str(spd['ranks']) + 'R)'
+                vv.dram_model_list[slot].value = vendor + '  ' + spd['part_number'] + ranks
             if 'PMIC' in elem and elem['PMIC']:
                 pmic_vid = elem['PMIC']['vid']
-                if pmic_vid == VENDOR_ID_RICHTEK:
-                    vv.pmic_vendor_list[slot].value = 'Richtek'
+                vendor = '0x%04X' % pmic_vid
+                if pmic_vid in PMIC_VENDOR_ID_DICT:
+                    vendor = PMIC_VENDOR_ID_DICT[pmic_vid]['name']
+                vv.pmic_vendor_list[slot].value = vendor
                 
         vv.BCLK.value = mem['BCLK_FREQ']
         vv.MCLK_RATIO.value = mem['SA']['QCLK_RATIO']
