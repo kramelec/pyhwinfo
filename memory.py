@@ -229,7 +229,8 @@ def get_mem_ctrl(ctrl_num):
 
 def get_mem_info():
     global gdict, proc_fam, proc_model_id, MCHBAR_BASE, DMIBAR_BASE
-    print('Processor Specification:', GetProcessorSpecification())
+    proc_name = GetProcessorSpecification()
+    print('Processor:', proc_name)
     proc_fam = GetProcessorFamily()
     print('Processor Family: 0x%X' % proc_fam)
     proc_model_id = GetProcessorExtendedModel() 
@@ -270,6 +271,7 @@ def get_mem_info():
     board = gdict['board'] = { }
     cpu['family'] = proc_fam
     cpu['model_id'] = proc_model_id
+    cpu['name'] = proc_name
     
     gdict['CAP'] = { }
     cap = gdict['CAP']

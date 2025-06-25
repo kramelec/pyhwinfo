@@ -90,16 +90,23 @@ class WindowMemory():
         # Main container
         main_frame = ttk.Frame(self.root, padding=(10, 5))
         main_frame.pack(fill=tk.BOTH, expand=True)
+
+        cpu_frame = ttk.Frame(main_frame)
+        cpu_frame.pack(fill=tk.X, pady=1)
+        ttk.Label(cpu_frame, text="CPU:", style='Title.TLabel').pack(side=tk.LEFT, padx = 5, pady = 1)
+        vv.cpu_name = WinVar('?????????')
+        cpu_label = ttk.Label(cpu_frame, textvariable=vv.cpu_name, style='Title.TLabel')
+        cpu_label.pack(side=tk.LEFT, padx = 5, pady = 1)
         
         mboard_frame = ttk.Frame(main_frame)
         mboard_frame.pack(fill=tk.X, pady=1)
-        ttk.Label(mboard_frame, text="Motherboard:", style='Title.TLabel').pack(side=tk.LEFT, padx = 5, pady = 5)
+        ttk.Label(mboard_frame, text="Motherboard:", style='Title.TLabel').pack(side=tk.LEFT, padx = 5, pady = 1)
         vv.mb_name = WinVar('?????????')
         if False:
             mb = get_motherboard_info()
             vv.mb_name.value = mb['manufacturer'] + ' ' + mb['product']
         mb_label = ttk.Label(mboard_frame, textvariable=vv.mb_name, style='Title.TLabel')
-        mb_label.pack(side=tk.LEFT, padx = 5, pady = 5)
+        mb_label.pack(side=tk.LEFT, padx = 5, pady = 1)
         
         dimm_frame = ttk.LabelFrame(main_frame, text="DIMM", style='Section.TLabelframe')
         dimm_frame.pack(fill=tk.X, pady=4)
@@ -491,6 +498,7 @@ class WindowMemory():
         
         pmic = dimm['PMIC'] if dimm and 'PMIC' in dimm else None
         
+        vv.cpu_name.value = self.mem_info['cpu']['name']
         board = self.mem_info['board']
         vv.mb_name.value = board['manufacturer'] + ' ' + board['product']
 
@@ -540,7 +548,7 @@ class WindowMemory():
             vv.chan_count.value = '?'
         
         vv.gear_mode.value = mem['GEAR']
-        vv.mem_freq.value = float(vv.MCLK_RATIO.value) * 2
+        vv.mem_freq.value = int(float(vv.MCLK_RATIO.value) * 2)
         if mem['BCLK_FREQ'] > 98 and mem['BCLK_FREQ'] < 105:
             vv.mem_freq.value = mem['SA']['QCLK_RATIO'] * 100 * 2
         if pmic:
