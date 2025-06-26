@@ -516,10 +516,13 @@ def exec_command(cmd):
 def get_motherboard_info():
     import subprocess
     out = { }
-    res = exec_command( [ 'wmic', 'baseboard', 'get', 'manufacturer' ] )
-    lines = res.split('\n')
-    out['manufacturer'] = lines[1].strip() if len(lines) > 1 else None
-    res = exec_command( [ 'wmic', 'baseboard', 'get', 'product' ] )
-    lines = res.split('\n')
-    out['product'] = lines[1].strip() if len(lines) > 1 else None
+    try:
+        res = exec_command( [ 'wmic', 'baseboard', 'get', 'manufacturer' ] )
+        lines = res.split('\n')
+        out['manufacturer'] = lines[1].strip() if len(lines) > 1 else None
+        res = exec_command( [ 'wmic', 'baseboard', 'get', 'product' ] )
+        lines = res.split('\n')
+        out['product'] = lines[1].strip() if len(lines) > 1 else None
+    except Exception:
+        return { 'product': '', 'manufacturer': '' }
     return out
