@@ -534,7 +534,7 @@ class WindowMemory():
         vv.MCLK_FREQ.value  = mem['SA']['QCLK']
         vv.UCLK_RATIO.value = mem['SA']['UCLK_RATIO']
         vv.UCLK_FREQ.value  = mem['SA']['UCLK']
-        if mem['mc'][0]['info']['DDR_ver'] == 5:
+        if mem['mc'][0]['DDR_ver'] == 5:
             max_chan_count = len(mem['mc']) * len(mem['mc'][0]['channels'])
             chan_count = 0
             for mc in mem['mc']:

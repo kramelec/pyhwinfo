@@ -18,7 +18,7 @@ from cpuidsdk64 import *
 from hardware import *
 
 # DOC: 13th Generation Intel ® Core™ Processor Datasheet, Volume 2 of 2
-# source: https://cdrdv2-public.intel.com/743846/743846-001.pdf
+# ref: https://cdrdv2-public.intel.com/743846/743846-001.pdf
 
 proc_fam = None
 proc_model_id = None
@@ -171,20 +171,20 @@ def get_mchbar_info(info, controller, channel):
 def get_mem_ctrl(ctrl_num):
     global gdict, proc_fam, proc_model_id, MCHBAR_BASE
    
+    mi = { }
+    mi['controller'] = ctrl_num
+   
+    MC_REGS_SIZE = None
     MCHBAR_addr = MCHBAR_BASE + (0x10000 * ctrl_num)
     if proc_model_id in ADL_FAM:
-        MADCH = phymem_read(MCHBAR_addr + 0xD800, 8)
-        mi = { }
+        MC_REGS_SIZE = 0x800
+        data_offset = 0xD800  # Inter-Channel Decode Parameters
+        MADCH = phymem_read(MCHBAR_addr + data_offset, 4)
         mi["DDR_TYPE"]     = get_bits(MADCH, 0, 0, 2)
         mi["CH_L_MAP"]     = get_bits(MADCH, 0, 4, 4)  # Channel L mapping to physical channel.  0 = Channel 0  1 = Channel 1
         mi["CH_S_SIZE"]    = get_bits(MADCH, 0, 12, 19)
-        mi["tPPD"]         = get_bits(MADCH, 0, 20, 23)
         mi["CH_WIDTH"]     = get_bits(MADCH, 0, 27, 28)
-        mi["HALF_CL_MODE"] = get_bits(MADCH, 0, 31, 31)
-        mi["Dimm_L_Map"]   = get_bits(MADCH, 1, 0, 0)
-        mi["EIM"]          = get_bits(MADCH, 1, 8, 8)
-        mi["ECC"]          = get_bits(MADCH, 1, 12, 13)
-        mi["CRC"]          = get_bits(MADCH, 1, 14, 14)
+        mi["HALFCACHELINEMODE"] = get_bits(MADCH, 0, 31, 31)   # HALF_CL_MODE
         if mi["DDR_TYPE"] in [ 0, 3 ]:
             mi["DDR_ver"] = 4  # DDR4 and LPDDR4
         else:
@@ -193,12 +193,16 @@ def get_mem_ctrl(ctrl_num):
         raise RuntimeError(f'ERROR: Processor model 0x{proc_model_id:X} not supported')
     #print(json.dumps(mi, indent = 4))
     mchan = [ ]
+    # 0xD804 - Intra-Channel 0 Decode Parameters
+    # 0xD808 - Intra-Channel 1 Decode Parameters
+    # 0xD80C - Channel 0 DIMM Characteristics
+    # 0xD810 - Channel 1 DIMM Characteristics
     for cnum in range(0, 2):
+        mc = { }
+        mc["__channel"] = cnum
         data = phymem_read(MCHBAR_addr + 0xD804 + cnum * 4, 4)
         if data == b'\xFF\xFF\xFF\xFF':
             raise RuntimeError()
-        mc = { }
-        mc["__channel"] = cnum
         mc["DIMM_L_MAP"] = get_bits(data, 0, 0, 0)  # Virtual DIMM L mapping to physical DIMM: 0 = DIMM0, 1 = DIMM1
         mc["EIM"] = get_bits(data, 0, 8, 8)
         mc["ECC"] = get_bits(data, 0, 12, 13)
@@ -219,13 +223,10 @@ def get_mem_ctrl(ctrl_num):
         mchan.append( mc )
     #if mi["CH_L_MAP"]:
     #    mchan.reverse()
-    memory = { }
-    memory['controller'] = ctrl_num
-    memory['info'] = mi
-    memory['channels'] = mchan
+    mi['channels'] = mchan
     for channel in range(0, 2):    
         mchan[channel]['info'] = get_mchbar_info(mi, ctrl_num, channel)
-    return memory
+    return mi
 
 def get_mem_info():
     global gdict, proc_fam, proc_model_id, MCHBAR_BASE, DMIBAR_BASE

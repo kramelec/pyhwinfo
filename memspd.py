@@ -433,7 +433,7 @@ def get_mem_spd_info(slot, mem_info: dict, with_pmic = True):
         else:
             raise RuntimeError('ERROR: Currently siupported only Intel platform')
 
-        g_smbus["ddr_ver"] = g_mem_info['memory']['mc'][0]['info']['DDR_ver']
+        g_smbus["ddr_ver"] = g_mem_info['memory']['mc'][0]['DDR_ver']
         print(f'DDR_ver: {g_smbus["ddr_ver"]}')
 
         offset = 0x10 + 4 * 4   # BAR4 - SMBus Addr
