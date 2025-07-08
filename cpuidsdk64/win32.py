@@ -516,13 +516,13 @@ def exec_command(cmd):
 def get_motherboard_info():
     import subprocess
     out = { }
+    cmd = 'Get-WmiObject win32_baseboard | Format-List Manufacturer,Product'
     try:
-        res = exec_command( [ 'wmic', 'baseboard', 'get', 'manufacturer' ] )
+        res = exec_command( [ 'powershell', '-command', cmd ] )
         lines = res.split('\n')
-        out['manufacturer'] = lines[1].strip() if len(lines) > 1 else None
-        res = exec_command( [ 'wmic', 'baseboard', 'get', 'product' ] )
-        lines = res.split('\n')
-        out['product'] = lines[1].strip() if len(lines) > 1 else None
+        lines = list(filter(None, lines))
+        out['manufacturer'] = lines[0].split(':')[1].strip()
+        out['product'] = lines[1].split(':')[1].strip()
     except Exception:
         return { 'product': '', 'manufacturer': '' }
     return out
