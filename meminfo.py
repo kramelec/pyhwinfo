@@ -358,19 +358,23 @@ class WindowMemory():
             vv.mc_ch_combobox.pack()
             vv.mc_ch_combobox.bind("<<ComboboxSelected>>", self.on_combobox_select)
         
-        def create_col_timings(tlist, wn = 8, wv = 5):
+        def create_col_timings(tlist, wn = 8, wv = 5, frame = None):
             nonlocal vv, base_timings_frame
-            col = ttk.Frame(base_timings_frame)
+            if not frame:
+                frame = base_timings_frame
+            col = ttk.Frame(frame)
             col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=8)
-            for name, value in tlist:
+            for item in tlist:
+                value = ''
+                if isinstance(item, str):
+                    name = item
+                else:
+                    name, value = item
                 if name == '__combobox':
                     create_mc_ch_combo(col, wn + wv)
                     continue
-                if name == '' or (name != 'RTL' and not name.startswith('t')):
-                    var = value
-                else:
-                    var = WinVar(value)
-                    setattr(vv, name, var)
+                var = WinVar(value)
+                setattr(vv, name, var)
                 _wn = wn
                 _wv = wv
                 if name == 'tREFI':
@@ -434,7 +438,7 @@ class WindowMemory():
             ( "tXP",     '??' ),
             ( "tXPDLL",  '??' ),
             ( "tXSDLL",  '??' ),
-            ( "tPPD",    ''   ),
+            ( "tPRPDEN", ''   ),
             ( "RTL",     '??/??/??/??' ),
         ]
         create_col_timings(col_timings, wv = 6)
@@ -487,6 +491,21 @@ class WindowMemory():
             ( "tWRWR_dd", '??' ),
         ]
         create_adv_timings(adv_timings, "Different DIMM")
+
+        ext_timings_frame = ttk.Frame(timings_frame)
+        ext_timings_frame.pack(fill=tk.BOTH, expand=True, padx=5)
+
+        col_timings = [ "DEC_tCWL", "ADD_tCWL", "tPPD", ]
+        create_col_timings(col_timings, wn = 8, frame = ext_timings_frame)
+
+        col_timings = [ "tCSL", "tCSH", "tRFM", ]
+        create_col_timings(col_timings, wn = 5, frame = ext_timings_frame)
+
+        col_timings = [ "oref_ri", "tZQOPER", "tMOD", ]
+        create_col_timings(col_timings, wn = 7, frame = ext_timings_frame)
+
+        col_timings = [ "X8_DEVICE" , "N_TO_1_RATIO", "ADD_1QCLK_DELAY", ]
+        create_col_timings(col_timings, wn = 15, frame = ext_timings_frame)
         
         # Refresh button
         btn_frame = ttk.Frame(main_frame)
@@ -629,7 +648,7 @@ class WindowMemory():
         vv.tXP.value = ci['tXP']
         vv.tXPDLL.value = ci['tXPDLL']
         vv.tXSDLL.value = ci['tXSDLL']
-        vv.tPPD.value = ci['tPPD']
+        vv.tPRPDEN.value = ci['tPRPDEN']
         rtl_list = [ '??', '??', '??', '??' ]
         for key, val in ci.items():
             if key.startswith('tRTL_'):
@@ -653,7 +672,20 @@ class WindowMemory():
         vv.tRDWR_dd.value = ci['tRDWR_dd']
         vv.tWRRD_dd.value = ci['tWRRD_dd']
         vv.tWRWR_dd.value = ci['tWRWR_dd']
-        
+
+        vv.DEC_tCWL.value = ci['DEC_tCWL']
+        vv.ADD_tCWL.value = ci['ADD_tCWL']
+        vv.tPPD.value = ci['tPPD']
+        vv.tCSL.value = ci['tCSL']
+        vv.tCSH.value = ci['tCSH']
+        vv.tRFM.value = ci['tRFM']
+        vv.oref_ri.value = ci['oref_ri']
+        vv.tZQOPER.value = ci['tZQOPER']
+        vv.tMOD.value = ci['tMOD']
+        vv.X8_DEVICE.value = ci['X8_DEVICE']
+        vv.N_TO_1_RATIO.value = ci['N_TO_1_RATIO']
+        vv.ADD_1QCLK_DELAY.value = ci['ADD_1QCLK_DELAY']
+
         self.current_slot = slot_id
         self.current_mc = mc_id
         self.current_ch = ch_id
