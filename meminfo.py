@@ -477,10 +477,10 @@ class WindowMemory():
         btn_refresh = ttk.Button(btn_frame, text="Refresh", command = self.button_click_refresh)
         btn_refresh.pack(side=tk.RIGHT)
 
-    def update(self, slot = None, mc_id = None, ch_id = None):
+    def update(self, slot_id = None, mc_id = None, ch_id = None):
         vv = self.vars
-        if slot is None:
-            slot = self.current_slot
+        if slot_id is None:
+            slot_id = self.current_slot
         if mc_id is None:
             mc_id = self.current_mc
         if ch_id is None:
@@ -489,12 +489,12 @@ class WindowMemory():
         mem = self.mem_info['memory']
         dimm = None
         for elem in self.dimm_info['DIMM']:
-            if elem['slot'] == slot:
+            if elem['slot'] == slot_id:
                 dimm = elem
                 break
         
         if not dimm:
-            raise RuntimeError(f'slot = {slot}')
+            raise RuntimeError(f'slot = {slot_id}')
         
         pmic = dimm['PMIC'] if dimm and 'PMIC' in dimm else None
         
@@ -637,7 +637,7 @@ class WindowMemory():
         vv.tWRRD_dd.value = ci['tWRRD_dd']
         vv.tWRWR_dd.value = ci['tWRWR_dd']
         
-        self.current_slot = slot
+        self.current_slot = slot_id
         self.current_mc = mc_id
         self.current_ch = ch_id
     
@@ -674,7 +674,7 @@ class WindowMemory():
         slot = vv.dimm_radio.get()
         print(f"You selected DIMM: {slot}")
         self.current_slot = int(slot)
-        self.update(slot = int(slot))
+        self.update(slot_id = int(slot))
         
     def on_combobox_select(self, event):
         vv = self.vars
@@ -683,7 +683,7 @@ class WindowMemory():
         xx = selected_value.split(',')
         mc_num = int(xx[0].split('#')[1].strip())
         ch_num = int(xx[1].split('#')[1].strip())
-        self.update(slot = self.current_slot, mc_id = mc_num, ch_id = ch_num)
+        self.update(slot_id = self.current_slot, mc_id = mc_num, ch_id = ch_num)
 
 if __name__ == "__main__":
     test = False
