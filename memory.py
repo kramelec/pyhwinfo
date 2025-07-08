@@ -272,7 +272,7 @@ def get_mem_info():
     board = gdict['board'] = { }
     cpu['family'] = proc_fam
     cpu['model_id'] = proc_model_id
-    cpu['name'] = proc_name
+    cpu['name'] = proc_name.replace('(R)', '').replace('(TM)', '')
     
     gdict['CAP'] = { }
     cap = gdict['CAP']
