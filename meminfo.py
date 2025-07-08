@@ -335,9 +335,12 @@ class WindowMemory():
         # Main timings section
         timings_frame = ttk.LabelFrame(main_frame, text="Timings", style='Section.TLabelframe')
         timings_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        
+        base_timings_frame = ttk.Frame(timings_frame)
+        base_timings_frame.pack(fill=tk.BOTH, expand=True, padx=5)
 
         def create_mc_ch_combo(col, width = 8):
-            nonlocal vv, mem, timings_frame
+            nonlocal vv, mem
             frame = ttk.Frame(col)
             frame.pack(fill=tk.X, pady=2)
             item_active = 0
@@ -356,8 +359,8 @@ class WindowMemory():
             vv.mc_ch_combobox.bind("<<ComboboxSelected>>", self.on_combobox_select)
         
         def create_col_timings(tlist, wn = 8, wv = 5):
-            nonlocal vv, timings_frame
-            col = ttk.Frame(timings_frame)
+            nonlocal vv, base_timings_frame
+            col = ttk.Frame(base_timings_frame)
             col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=8)
             for name, value in tlist:
                 if name == '__combobox':
@@ -436,8 +439,8 @@ class WindowMemory():
         ]
         create_col_timings(col_timings, wv = 6)
         
-        adv_frame = ttk.Frame(main_frame)
-        adv_frame.pack(fill=tk.X, pady=5)
+        adv_frame = ttk.Frame(timings_frame)
+        adv_frame.pack(fill=tk.BOTH, expand=True, pady=7, padx=5)
 
         def create_adv_timings(tlist, caption, wn = 9, wv = 5):
             nonlocal vv, adv_frame
