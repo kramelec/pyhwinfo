@@ -9,6 +9,7 @@ import math
 
 import tkinter as tk
 from tkinter import ttk
+from tkextrafont import load_extrafont
 
 from hardware import *
 
@@ -55,6 +56,7 @@ class WindowMemory():
     def __init__(self):
         global win_caption
         self.root = tk.Tk()
+        load_extrafont(self.root)
         self.root.title(win_caption)
         self.root.resizable(False, False)
         self.init_styles()
@@ -63,9 +65,9 @@ class WindowMemory():
         self.sdk_inited = False
         self.mem_info = None
         self.dimm_info = None
-        self.mc_chan_names = [ 'A', 'B', 'C', 'D' ]
         
-    def init_styles(self):    
+    def init_styles(self):
+        self.root.load_font("styles/IntelOneMono-Medium.ttf")
         style = ttk.Style()
         style.configure('Title.TLabel', font=('Segoe UI', 10))
         style.configure("TRadiobutton", font=('Segoe UI', 10))
@@ -74,10 +76,10 @@ class WindowMemory():
         style.configure('val.TLabel', font=('Consolas', 10), padding=2, background="white", foreground="black", relief="groove", borderwidth=2)
         style.configure('Small.TLabel', font=('Consolas', 8))
 
-        style.configure('fixT.TLabel', font=('Fixedsys', 10), padding=2)
-        style.configure('fixV.TLabel', font=('Fixedsys', 10), padding=2, background="white", foreground="black", relief="groove", borderwidth=2)
+        style.configure('fixT.TLabel', font=('Intel One Mono Medium', 10), padding=2)
+        style.configure('fixV.TLabel', font=('Intel One Mono Medium', 10), padding=2, background="white", foreground="black", relief="groove", borderwidth=2)
         style.configure('fixV2.TLabel', font=('Segoe UI', 9), padding=2, background="white", foreground="black", relief="groove", borderwidth=2)
-        style.configure('fixA.TLabel', font=('Fixedsys', 8))
+        style.configure('fixA.TLabel', font=('Intel One Mono Medium', 8))
 
     def create_window(self):
         vv = self.vars
