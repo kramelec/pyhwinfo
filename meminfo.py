@@ -157,36 +157,47 @@ class WindowMemory():
         dnum = 0
         for mc in mem['mc']:
             mc_num = mc['controller']
-            for ch in mc['channels']:
-                ch_num = ch['__channel']
-                ch_name = self.mc_chan_names[ch_num]
-                self.dimm_map[dnum] = { 'mc': mc_num, 'ch': ch_num, 'CH': ch_name, 'size': 0 }
+            chlst = [ mc['channels'][0], mc['channels'][1] ]
+            for pnum in range(0, 2):
+                size = 0
+                ch_num_list = [ ]
+                ch_tag_list = [ ]
+                for cnum, ch in enumerate(chlst):
+                    if pnum == 0:
+                        tag = 'L' if ch['DIMM_L_MAP'] == 0 else 'S'
+                    else:
+                        tag = 'S' if ch['DIMM_L_MAP'] == 0 else 'L'
+                    sz = ch[f'Dimm_{tag}_Size']
+                    if sz > 0:
+                        ch_num_list.append(ch['__channel'])
+                        ch_tag_list.append(tag)
+                        size += sz
+                size = size // 2
+                self.dimm_map[dnum] = { 'mc': mc_num, 'ch': ch_num_list, 'CH': '?', 'tag': ch_tag_list, 'size': size }
                 dnum += 1
         
-        first_slot = None
+        self.current_slot = None
         for dnum in range(0, self.dimm_count):
             if dnum not in self.dimm_map:
                 break
             mc_num = self.dimm_map[dnum]['mc']
             mc = mem['mc'][mc_num]
-            ch_num = self.dimm_map[dnum]['ch']
-            ch = mc['channels'][ch_num]
-            ch_name = self.mc_chan_names[ch_num]
-            if ch_num == 0:
-                size = ch['Dimm_L_Size']
-            else:
-                size = ch['Dimm_S_Size']
+            ch_num_list = self.dimm_map[dnum]['ch']
+            ch_tag_list = self.dimm_map[dnum]['tag']
+            ch_name = ''
+            size = self.dimm_map[dnum]['size']
             model = '????????'
             pmic_name = '???????'
-            if size and first_slot is None:
-                first_slot = dnum
+            if size and (len(ch_tag_list) == 1 or (len(ch_tag_list) == 2 and ch_tag_list[0] == ch_tag_list[1] )):
+                ch_name = 'A' if ch_tag_list[0] == 'L' else 'B'
+            if size and self.current_slot is None:
                 self.current_slot = dnum
                 self.current_mc = mc_num
-                self.current_ch = ch_num
+                self.current_ch = ch_num_list[0]
             create_dimm(dnum, size, model, mc_num, ch_name, pmic_name)
-            self.dimm_map[dnum]['size'] = size
 
-        vv.dimm_radio.set(str(first_slot))
+        if self.current_slot is not None:
+            vv.dimm_radio.set(str(self.current_slot))
         
         freq_volt_frame = ttk.Frame(main_frame)
         freq_volt_frame.pack(fill=tk.X, pady=5)
@@ -327,17 +338,18 @@ class WindowMemory():
             nonlocal vv, mem, timings_frame
             frame = ttk.Frame(col)
             frame.pack(fill=tk.X, pady=2)
+            item_active = 0
             options = [ ]
-            for dnum, elem in self.dimm_map.items():
-                #if not elem['size']:
-                #    continue
-                mc_num = elem['mc']
-                ch_num = elem['ch']
-                ch_name = self.mc_chan_names[ch_num]
-                options.append( f'MC #{mc_num}, CH #{ch_num}' )
+            for mc in mem['mc']:
+                mc_num = mc['controller']
+                for ch in mc['channels']:
+                    ch_num = ch['__channel']
+                    options.append( f'MC #{mc_num}, CH #{ch_num}' )
+                    if mc_num == self.current_mc and ch_num == self.current_ch:
+                        item_active = len(options) - 1
             vv.mc_ch_combobox = ttk.Combobox(frame, values=options, width = width + 3)
             vv.mc_ch_combobox.pack(side=tk.LEFT, padx = 1)
-            vv.mc_ch_combobox.current(0)
+            vv.mc_ch_combobox.current(item_active)
             vv.mc_ch_combobox.pack()
             vv.mc_ch_combobox.bind("<<ComboboxSelected>>", self.on_combobox_select)
         
