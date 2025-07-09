@@ -171,9 +171,33 @@ def get_mchbar_info(info, controller, channel):
         tm["tRTL_1"] = get_bits(data, 0x020, 8, 15)
         tm["tRTL_2"] = get_bits(data, 0x020, 16, 23)
         tm["tRTL_3"] = get_bits(data, 0x020, 24, 31)
+
+        if True: # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # file "MrcMcRegisterStructAdlExxx.h"
+            tm["enable_odt_matrix"] = get_bits(data, IMC_SC_GS_CFG, 24)
+            tm["ODT_read_duration"] = get_bits(data, IMC_CR_TC_ODT, 0, 3)
+            tm["ODT_Read_Delay"] = get_bits(data, IMC_CR_TC_ODT, 4, 7)
+            tm["ODT_write_duration"] = get_bits(data, IMC_CR_TC_ODT, 8, 11)
+            tm["ODT_Write_Delay"] = get_bits(data, IMC_CR_TC_ODT, 12, 15)
+            tm["tAONPD"] = get_bits(data, IMC_CR_TC_ODT, 32, 37)
+            tm["Write_Early_ODT"] = get_bits(data, IMC_CR_TC_ODT, 38)
+            tm["PtrSep"] = get_bits(data, IMC_CR_TC_ODT, 39, 40)
+            IMC_MISC_ODT = 0x0B4
+            tm["ODT_Override"] = get_bits(data, IMC_MISC_ODT, 0, 3)
+            tm["ODT_On"] = get_bits(data, IMC_MISC_ODT, 16, 19)
+            tm["MPR_Train_DDR_On"] = get_bits(data, IMC_MISC_ODT, 31)
         
-        tm["Banks"] = 8 if get_bits(data, IMC_SC_GS_CFG, 0, 2) else 16  # UNDOC
-        #tm["Columns"] = 1 << 10
+        IMC_ODT_Matrix = 0x080 # enabled using SC_GS_CFG_0_0_0_MCHBAR.enable_odt_matrix
+        tm["READ_RANK_0"] = get_bits(data, IMC_ODT_Matrix, 0, 3)
+        tm["READ_RANK_1"] = get_bits(data, IMC_ODT_Matrix, 4, 7)
+        tm["READ_RANK_2"] = get_bits(data, IMC_ODT_Matrix, 8, 11)
+        tm["READ_RANK_3"] = get_bits(data, IMC_ODT_Matrix, 12, 15)
+        tm["WRITE_RANK_0"] = get_bits(data, IMC_ODT_Matrix, 16, 19)
+        tm["WRITE_RANK_1"] = get_bits(data, IMC_ODT_Matrix, 20, 23)
+        tm["WRITE_RANK_2"] = get_bits(data, IMC_ODT_Matrix, 24, 27)
+        tm["WRITE_RANK_3"] = get_bits(data, IMC_ODT_Matrix, 28, 31)
+        
+        tm["DRAM_technology"] = get_bits(data, IMC_SC_GS_CFG, 0, 2)
+
         get_undoc_params(tm, info, controller, channel)
     else:
         raise RuntimeError(f'ERROR: Processor model 0x{proc_model_id:X} not supported')
@@ -198,8 +222,9 @@ def get_undoc_params(tm, info, controller, channel):
         info["BurstLength"] = 4   # BL32 - tCK in 4:1 is 8 UI's per clock, 4tCK
 
     # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # func "SetTcTurnAround"
-    # tWRRD_sg = Timing->tCWL + BurstLength + tWTR_L + 2;
-    # tWRRD_dg = Timing->tCWL + BurstLength + tWTR_S + 2;
+    # TatDelta = 0
+    # tWRRD_sg = Timing->tCWL + BurstLength + tWTR_L + 2 + TatDelta;
+    # tWRRD_dg = Timing->tCWL + BurstLength + tWTR_S + 2 + TatDelta;
     tm["tWTR_L"] = tm['tWRRD_sg'] - tm['tCWL'] - info["BurstLength"] - 2
     tm["tWTR_S"] = tm['tWRRD_dg'] - tm['tCWL'] - info["BurstLength"] - 2
     
