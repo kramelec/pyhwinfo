@@ -11,6 +11,7 @@ import ctypes.wintypes as wintypes
 from ctypes import byref
 from types import SimpleNamespace
 import json
+import enum
 
 __author__ = 'remittor'
 
@@ -27,6 +28,23 @@ DMIBAR_BASE = None
 gdict = { }
 
 ADL_FAM = [ INTEL_ALDERLAKE, INTEL_ALDERLAKE_L, INTEL_RAPTORLAKE, INTEL_RAPTORLAKE_P, INTEL_RAPTORLAKE_S]
+
+class DDR_TYPE(enum.IntEnum):
+    def __new__(cls, value, name, doc = None):
+        obj = int.__new__(cls, value)
+        obj._value_ = value
+        obj._name_ = name
+        obj.__doc__ = doc
+        return obj
+    DDR4   = 0, "DDR4"
+    DDR5   = 1, "DDR5"
+    LPDDR5 = 2, "LPDDR5"
+    LPDDR4 = 3, "LPDDR4"
+
+TREFIMIN_LPDDR  = 3904000   # Average periodic refresh interval, in picoseconds (3.904 us for LPDDR4/5)
+TREFIMIN_DDR4   = 7800000   # Average periodic refresh interval, in picoseconds (7.8 us for DDR4)
+TREFIMIN_DDR5   = 1950000   # Average periodic refresh interval, in picoseconds (1.95 us for DDR5)
+TREFIMULTIPLIER = 1000      # tREFI value defined in XMP 1.3 spec is actually in thousands of MTB units. 
 
 def get_mchbar_info(info, controller, channel):
     global gdict, proc_model_id, MCHBAR_BASE 
@@ -73,9 +91,17 @@ def get_mchbar_info(info, controller, channel):
         IMC_CR_TC_ACT = 0x008     # Timing constraints to ACT commands
         tm["tFAW"]     = get_bits(data, IMC_CR_TC_ACT, 0, 8)
         tm["tRRD_sg"]  = get_bits(data, IMC_CR_TC_ACT, 9, 14)
-        tm["tRRD_L"] = tm["tRRD_sg"]
         tm["tRRD_dg"]  = get_bits(data, IMC_CR_TC_ACT, 15, 21)
-        tm["tRRD_S"] = tm["tRRD_dg"]
+        tm["tRRD"] = None
+        tm["tRRD_L"] = None
+        tm["tRRD_S"] = None
+        if info["DDR_TYPE"] in [ DDR_TYPE.DDR4, DDR_TYPE.DDR5 ]:
+            tm["tRRD"]   = tm["tRRD_sg"]
+            tm["tRRD_L"] = tm["tRRD_sg"]
+            tm["tRRD_S"] = tm["tRRD_dg"]
+        if info["DDR_TYPE"] in [ DDR_TYPE.LPDDR4, DDR_TYPE.LPDDR5 ]:
+            tm["tRRD"]   = tm["tRRD_sg"]
+            tm["tRRD_L"] = tm["tRRD_sg"]
         tm["tREFSBRD"] = get_bits(data, IMC_CR_TC_ACT, 24, 31)
         IMC_TC_PWDEN = 0x050     # Power Down Timing
         tm["tCKE"] = get_bits(data, IMC_TC_PWDEN, 0, 6)
@@ -185,10 +211,12 @@ def get_mem_ctrl(ctrl_num):
         mi["CH_S_SIZE"]    = get_bits(MADCH, 0, 12, 19)
         mi["CH_WIDTH"]     = get_bits(MADCH, 0, 27, 28)
         mi["HALFCACHELINEMODE"] = get_bits(MADCH, 0, 31, 31)   # HALF_CL_MODE
-        if mi["DDR_TYPE"] in [ 0, 3 ]:
-            mi["DDR_ver"] = 4  # DDR4 and LPDDR4
+        if mi["DDR_TYPE"] in [ DDR_TYPE.DDR4, DDR_TYPE.LPDDR4 ]:
+            mi["DDR_ver"] = 4
+        elif mi["DDR_TYPE"] in [ DDR_TYPE.DDR5, DDR_TYPE.LPDDR5 ]:
+            mi["DDR_ver"] = 5
         else:
-            mi["DDR_ver"] = 5  # DDR5 and LPDDR5
+            raise RuntimeError()
     else:
         raise RuntimeError(f'ERROR: Processor model 0x{proc_model_id:X} not supported')
     #print(json.dumps(mi, indent = 4))
