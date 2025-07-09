@@ -199,6 +199,7 @@ def get_mchbar_info(info, controller, channel):
         tm["DRAM_technology"] = get_bits(data, IMC_SC_GS_CFG, 0, 2)
 
         get_undoc_params(tm, info, controller, channel)
+        get_mrs_storage(data, tm, info, controller, channel)
     else:
         raise RuntimeError(f'ERROR: Processor model 0x{proc_model_id:X} not supported')
     return tm
@@ -275,6 +276,41 @@ def get_undoc_params(tm, info, controller, channel):
         tm['tWR'] -= 1
     else:
         raise RuntimeError()
+
+def get_mrs_storage(data, tm, info, controller, channel):
+    # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # file "MrcMcRegisterStructAdlExxx.h" + "MrcDdr5Registers.h"
+    IMC_MRS_FSM_STORAGE = 0x200
+    MAX_MR_GEN_FSM          = 108  # Maximum number of MRS FSM CONTROL MR Addresses that can be sent.
+    GEN_MRS_FSM_STORAGE_MAX = 60   # 60 Storage registers
+    GEN_MRS_FSM_BYTE_MAX    = 240  # 60 Registers * 4 Bytes per register         
+    mrs_data = data[IMC_MRS_FSM_STORAGE:IMC_MRS_FSM_STORAGE+GEN_MRS_FSM_BYTE_MAX]
+    #print('msr:', mrs_data.hex())
+    mr = tm['MRS'] = { }
+    MR0 = 0*4
+    mr["BurstLength"] = get_bits(mrs_data, MR0, 0, 1)
+    CasLatency = get_bits(mrs_data, MR0, 2, 6)
+    mr["CasLatency"] = 22 + CasLatency * 2
+    MR4 = 4*4
+    mr["RefreshRate"] = get_bits(mrs_data, MR4, 0, 2)
+    mr["RefreshTrfcMode"] = get_bits(mrs_data, MR4, 4, 4)
+    mr["Tuf"] = get_bits(mrs_data, MR4, 7)
+    MR6 = 6*4
+    WriteRecoveryTime = get_bits(mrs_data, MR6, 0, 3)
+    mr["WriteRecoveryTime"] = 48 + WriteRecoveryTime * 6
+    tRTP = get_bits(mrs_data, MR6, 4, 7)
+    RTP_map = [ 12, 14, 15, 17, 18, 20, 21, 23, 24 ]
+    mr["tRTP"] = RTP_map[tRTP] 
+    MR13 = 12*4
+    mr["tCCD_L_tDLLK"] = get_bits(mrs_data, MR13, 0, 3)
+    MR33 = 28*4
+    mr["CaOdt"] = get_bits(mrs_data, MR33, 0, 2)
+    mr["DqsRttPark"] = get_bits(mrs_data, MR33, 3, 5)
+    MR34 = 29*4
+    mr["RttPark"] = get_bits(mrs_data, MR34, 0, 2)
+    mr["RttWr"] = get_bits(mrs_data, MR34, 3, 5)
+    MR35 = 30*4
+    mr["RttNomWr"] = get_bits(mrs_data, MR35, 0, 2)
+    mr["RttNomRd"] = get_bits(mrs_data, MR35, 3, 5)
 
 def get_mem_ctrl(ctrl_num):
     global gdict, proc_fam, proc_model_id, MCHBAR_BASE
