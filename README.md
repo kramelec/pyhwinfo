@@ -10,9 +10,16 @@ Python module for retrieving hardware information
 
 * Run `!START.bat`
 
-## Screenshots
+## GUI Preview
 
-![image](https://github.com/user-attachments/assets/7c4ab425-bb7a-4463-b98c-00625bfd9e2e)
+![image](https://github.com/user-attachments/assets/9fbb09f5-338b-4753-b60e-5237f3d10cb5)
+
+## Current restrictions
+
+* only Windows (Win7+)
+* only Intel platform
+* only 12th,13th,14th generations of CPU
+* only DDR5 (DDR4 not tested)
 
 ## Donations
 
