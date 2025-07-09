@@ -16,7 +16,8 @@ from memory import *
 
 __author__ = 'remittor'
 
-win_caption = "pyhwinfo v0.3 - memory info"
+from version import appver
+win_caption = f"pyhwinfo v{appver} - memory info"
 
 class WinVar(tk.Variable):
     _default = ""   # Value holder for strings variables
