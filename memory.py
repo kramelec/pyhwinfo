@@ -156,24 +156,9 @@ def get_mchbar_info(info, controller, channel):
         tm["DEC_tCWL"] = get_bits(data, 0x478, 0, 5)   # The number of cycles (DCLK) decreased from tCWL.
         tm["ADD_tCWL"] = get_bits(data, 0x478, 6, 11)  # The number of cycles (DCLK) increased to tCWL.
         tm["ADD_1QCLK_DELAY"] = get_bits(data, 0x478, 12, 12)  # In Gear2, MC QCLK is actually 1xClk of the DDR, the regular MC register can only set even number of cycles (working in Dclk == 2 * 1xClk)
-        xCWL = tm['tCWL']
-        xCWL -= tm['DEC_tCWL']  # UNDOC
-        xCWL += tm['ADD_tCWL']  # UNDOC
-        tm["tWTR_L"] = tm['tWRRD_sg'] - xCWL - 10
-        tm["tWTR_S"] = tm['tWRRD_dg'] - xCWL - 10
-        #tm["tWTR_L"] = tm['tWRRD_sg'] - tm['tCWL'] - 10  # if ASRock then -6
-        #tm["tWTR_S"] = tm['tWRRD_dg'] - tm['tCWL'] - 10  # if ASRock then -6 
 
         tm["tXSR"] = get_bits(data, 0x4C0, 0, 12)
         tm["tSR"] = get_bits(data, 0x4C0, 52, 57)
-
-        if info["DDR_TYPE"] in [ 0, 3 ]:
-            tWR_quantity = 4  # DDR4 and LPDDR4
-        else:
-            tWR_quantity = 8  # DDR5 and LPDDR5
-
-        #if tm['tWRPRE'] > tm['tCWL'] + tWR_quantity:
-        tm['tWR'] = tm['tWRPRE'] - tm['tCWL'] - tWR_quantity
 
         if tm['GEAR4']:
             tm['GEAR'] = 4
@@ -189,10 +174,82 @@ def get_mchbar_info(info, controller, channel):
         
         tm["Banks"] = 8 if get_bits(data, IMC_SC_GS_CFG, 0, 2) else 16  # UNDOC
         #tm["Columns"] = 1 << 10
-        
+        get_undoc_params(tm, info, controller, channel)
     else:
         raise RuntimeError(f'ERROR: Processor model 0x{proc_model_id:X} not supported')
     return tm
+    
+def get_undoc_params(tm, info, controller, channel):
+    global gdict
+    mem = gdict['memory']
+    mem_speed = mem['SA']['QCLK'] * 2   # MT/s
+    mem["Speed"] = round(mem_speed, 2)
+    # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # file "MrcInterface.h"
+    mem["tCKmin"] = round(10**9 / (mem_speed / 2), 2)
+
+    # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # func "MrcSpdProcessing"
+    if info["DDR_TYPE"] == DDR_TYPE.DDR4:
+        info["BurstLength"] = 4   # BL8  - 8 UI's,  4 tCK
+    elif info["DDR_TYPE"] == DDR_TYPE.DDR5:
+        info["BurstLength"] = 8   # BL16 - 16 UI's, 8 tCK
+    elif info["DDR_TYPE"] == DDR_TYPE.LPDDR4:
+        info["BurstLength"] = 16  # BL32 - 32 UI's, 16 tCK
+    elif info["DDR_TYPE"] == DDR_TYPE.LPDDR5:
+        info["BurstLength"] = 4   # BL32 - tCK in 4:1 is 8 UI's per clock, 4tCK
+
+    # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # func "SetTcTurnAround"
+    # tWRRD_sg = Timing->tCWL + BurstLength + tWTR_L + 2;
+    # tWRRD_dg = Timing->tCWL + BurstLength + tWTR_S + 2;
+    tm["tWTR_L"] = tm['tWRRD_sg'] - tm['tCWL'] - info["BurstLength"] - 2
+    tm["tWTR_S"] = tm['tWRRD_dg'] - tm['tCWL'] - info["BurstLength"] - 2
+    
+    if False:  # ASRock Timing Configurator
+        xCWL = tm['tCWL']
+        xCWL -= tm['DEC_tCWL']  # UNDOC
+        xCWL += tm['ADD_tCWL']  # UNDOC
+        tm["tWTR_L"] = tm['tWRRD_sg'] - xCWL - info["BurstLength"] - 2
+        tm["tWTR_S"] = tm['tWRRD_dg'] - xCWL - info["BurstLength"] - 2
+
+    # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # func "MrcSetupMrcData"
+    tm["FineGranularityRefresh"] = True
+    if tm["REFRESH_HP_WM"] == 4 and tm["REFRESH_PANIC_WM"] == 5:
+        tm["FineGranularityRefresh"] = False
+
+    ''' # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # func "SetTcPreActOdt"
+      // tWRPRE is = tCWL + BLn/2 + tWR
+      tWRPRE = Timing->tCWL + Outputs->BurstLength + Timing->tWR;
+      // LPDDR adds an addition clock
+      // LPDDR5 - 4.10.4 Timing constraints for 8Bank Mode (BL32 only)
+      if (Lpddr) {
+        tWRPRE++;
+      }
+      if (Lpddr5) {
+        tWRPRE = ((INT32) tWRPRE) * 4;
+      }
+      SubtractOneClock = Ddr5 && (Timing->NMode == 2);
+      if (SubtractOneClock) {
+        tWRPRE--;
+      }
+      tWRPRE = RANGE (tWRPRE, tWRPRE_MIN, tWRPRE_MAX);       
+    '''
+    tWRPRE_MIN = 18  # < minimum tWRPRE (Write->PRE) supported in tCK/wCK
+    tWRPRE_MAX = 200 # < maximum tWRPRE (Write->PRE) supported in tCK/wCK
+    tm['tWR'] = tm['tWRPRE'] - tm['tCWL'] - info["BurstLength"]
+    if info["DDR_TYPE"] == DDR_TYPE.DDR4:
+        pass
+    elif info["DDR_TYPE"] == DDR_TYPE.DDR5:
+        if tm["tCR"] == '2N': # SubtractOneClock
+            tm['tWR'] += 1
+        # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # func "tWRPDENValue"
+        # tWRPDEN = tCWL + MRC_DDR5_tCCD_ALL_FREQ  + tWR + 1;
+        MRC_DDR5_tCCD_ALL_FREQ = 8  # CAS-to-CAS delay for all frequencies in tCK
+        tm['tWR__a'] = tm['tWRPDEN'] - tm['tCWL'] - MRC_DDR5_tCCD_ALL_FREQ - 1
+    elif info["DDR_TYPE"] == DDR_TYPE.LPDDR5:
+        tm['tWR'] = tm['tWRPRE'] // 4 - tm['tCWL'] - info["BurstLength"] - 1
+    elif info["DDR_TYPE"] == DDR_TYPE.LPDDR4:
+        tm['tWR'] -= 1
+    else:
+        raise RuntimeError()
 
 def get_mem_ctrl(ctrl_num):
     global gdict, proc_fam, proc_model_id, MCHBAR_BASE
