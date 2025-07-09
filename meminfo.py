@@ -12,6 +12,7 @@ from tkinter import ttk
 from tkextrafont import load_extrafont
 
 from hardware import *
+from memory import *
 
 __author__ = 'remittor'
 
@@ -342,7 +343,7 @@ class WindowMemory():
         def create_mc_ch_combo(col, width = 8):
             nonlocal vv, mem
             frame = ttk.Frame(col)
-            frame.pack(fill=tk.X, pady=2)
+            frame.pack(fill=tk.X, pady=4)
             item_active = 0
             options = [ ]
             for mc in mem['mc']:
@@ -584,7 +585,7 @@ class WindowMemory():
             vv.chan_count.value = '?'
         
         vv.gear_mode.value = mem['GEAR']
-        vv.mem_freq.value = int(float(vv.MCLK_RATIO.value) * 2)
+        vv.mem_freq.value = int(float(vv.MCLK_FREQ.value) * 2)
         if mem['BCLK_FREQ'] > 98 and mem['BCLK_FREQ'] < 105:
             vv.mem_freq.value = mem['SA']['QCLK_RATIO'] * 100 * 2
         if pmic:
@@ -706,7 +707,6 @@ class WindowMemory():
                 self.dimm_info = json.load(file)
         else:
             from cpuidsdk64 import SdkInit
-            from memory import get_mem_info
             from memspd import get_mem_spd_all
             if not self.sdk_inited:
                 SdkInit(None, verbose = 0)
