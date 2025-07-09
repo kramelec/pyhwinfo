@@ -74,12 +74,12 @@ class WindowMemory():
         style.configure("TRadiobutton", font=('Segoe UI', 10))
         style.configure('Section.TLabelframe.Label', font=('Segoe UI', 9))
         style.configure('Value.TLabel', font=('Consolas', 10))
-        style.configure('val.TLabel', font=('Consolas', 10), padding=2, background="white", foreground="black", relief="groove", borderwidth=2)
+        style.configure('val.TLabel', font=('Consolas', 10), padding=0, background="white", foreground="black", relief="groove", borderwidth=2)
         style.configure('Small.TLabel', font=('Consolas', 8))
 
-        style.configure('fixT.TLabel', font=('Intel One Mono Medium', 10), padding=2)
-        style.configure('fixV.TLabel', font=('Intel One Mono Medium', 10), padding=2, background="white", foreground="black", relief="groove", borderwidth=2)
-        style.configure('fixV2.TLabel', font=('Segoe UI', 9), padding=2, background="white", foreground="black", relief="groove", borderwidth=2)
+        style.configure('fixT.TLabel', font=('Intel One Mono Medium', 10), padding=0)
+        style.configure('fixV.TLabel', font=('Intel One Mono Medium', 10), padding=0, background="white", foreground="black", relief="groove", borderwidth=2)
+        style.configure('fixV2.TLabel', font=('Segoe UI', 9), padding=0, background="white", foreground="black", relief="groove", borderwidth=2)
         style.configure('fixA.TLabel', font=('Intel One Mono Medium', 8))
 
     def create_window(self):
