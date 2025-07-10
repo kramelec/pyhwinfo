@@ -335,6 +335,7 @@ def get_mem_ctrl(ctrl_num):
             mi["DDR_ver"] = 5
         else:
             raise RuntimeError()
+        mi['DDR_type'] = DDR_TYPE(mi["DDR_TYPE"]).name
     else:
         raise RuntimeError(f'ERROR: Processor model 0x{proc_model_id:X} not supported')
     #print(json.dumps(mi, indent = 4))
