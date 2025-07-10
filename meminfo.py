@@ -66,7 +66,6 @@ class WindowMemory():
         self.test = False
         self.sdk_inited = False
         self.mem_info = None
-        self.dimm_info = None
         
     def init_styles(self):
         self.root.load_font("styles/IntelOneMono-Medium.ttf")
@@ -526,7 +525,7 @@ class WindowMemory():
         cap = self.mem_info['CAP']
         mem = self.mem_info['memory']
         dimm = None
-        for elem in self.dimm_info['DIMM']:
+        for elem in self.mem_info['memory']['DIMM']:
             if elem['slot'] == slot_id:
                 dimm = elem
                 break
@@ -547,13 +546,11 @@ class WindowMemory():
             elem.set('')
         
         slot_count = 0
-        for elem in self.dimm_info['DIMM']:
+        for elem in self.mem_info['memory']['DIMM']:
             slot = elem['slot']
             slot_count += 1
-            if 'spd_eeprom' in elem:
-                from spd_eeprom import spd_eeprom_decode
-                spd = spd_eeprom_decode(elem['spd_eeprom'])
-                elem['SPD'] = spd
+            spd = elem['SPD']
+            if spd:
                 vid = spd['vendorid']
                 vendor = '0x%04X' % vid
                 if vid in DRAM_VENDOR_ID_DICT: 
@@ -704,16 +701,13 @@ class WindowMemory():
         if self.test:
             with open('IMC.json', 'r', encoding='utf-8') as file:
                 self.mem_info = json.load(file)
-            with open('DIMM.json', 'r', encoding='utf-8') as file:
-                self.dimm_info = json.load(file)
         else:
             from cpuidsdk64 import SdkInit
             from memspd import get_mem_spd_all
             if not self.sdk_inited:
                 SdkInit(None, verbose = 0)
                 self.sdk_inited = True
-            self.mem_info = get_mem_info()
-            self.dimm_info = get_mem_spd_all(self.mem_info, with_pmic = True)
+            self.mem_info = get_mem_spd_all(None, with_pmic = True, allinone = True)
     
     def button_click_refresh(self):
         print("Button refresh clicked!")

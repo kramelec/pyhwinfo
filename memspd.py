@@ -482,6 +482,10 @@ def get_mem_spd_info(slot, mem_info: dict, with_pmic = True):
         #print(f'spd[{slot}][MR49] = 0x{temp:04X}  =>  {temp} degC')
         spd['temp'] = temp
 
+    spd['PMIC'] = None
+    spd['spd_eeprom'] = ""
+    spd['SPD'] = None
+
     spd_data = mem_spd_read_full(slot)
     #print(f'SPD[0] = {spd_data.hex()}')
     if spd_data and len(spd_data) >= 1024:
@@ -493,8 +497,9 @@ def get_mem_spd_info(slot, mem_info: dict, with_pmic = True):
         
     return spd
 
-def get_mem_spd_all(mem_info: dict, with_pmic = True):
+def get_mem_spd_all(mem_info: dict, with_pmic = True, allinone = True):
     global g_mem_info, g_mutex, g_smbus, smb_addr
+    from spd_eeprom import spd_eeprom_decode
     if not mem_info:
         from memory import get_mem_info
         mem_info = get_mem_info()
@@ -507,16 +512,20 @@ def get_mem_spd_all(mem_info: dict, with_pmic = True):
             continue
         if not dimm['SMBus']:
             dimm['SMBus'] = g_smbus.copy()
+        spd['SPD'] = spd_eeprom_decode(spd['spd_eeprom'])
         dimm['DIMM'].append(spd)
+    if allinone:
+        mem_info['memory']['SMBus'] = copy.deepcopy(dimm['SMBus'])
+        mem_info['memory']['DIMM']  = copy.deepcopy(dimm['DIMM'])
+        return mem_info
     return dimm
 
 if __name__ == "__main__":
     from memory import get_mem_info
+    fn = 'IMC.json'
+    os.remove(fn) if os.path.exists(fn) else None
     SdkInit(None, verbose = 0)
-    dimm = get_mem_spd_all(None, with_pmic = True)
-    with open('DIMM.json', 'w') as file:
-        json.dump(dimm, file, indent = 4)
-    if g_mem_info:
-        with open('IMC.json', 'w') as file:
-            json.dump(g_mem_info, file, indent = 4)
+    mem_info = get_mem_spd_all(None, with_pmic = True, allinone = True)
+    with open(fn, 'w') as file:
+        json.dump(mem_info, file, indent = 4)
     

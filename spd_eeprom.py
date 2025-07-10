@@ -109,7 +109,7 @@ def spd_eeprom_decode(data):
     
     out['vendorid'] = get_bits(data, 512, 0, 15)
     out['manuf_date'] = get_bits(data, 515, 0, 15)
-    out['serial_number'] = data[517:517+2].hex() + '-' + data[519:519+2].hex()
+    out['serial_number'] = data[517:517+2].hex().upper() + '-' + data[519:519+2].hex().upper()
     out['part_number'] = data[521:551].decode('latin-1').strip()
     out['module_rev'] = get_bits(data, 551, 0, 7)
     out['die_vendorid'] = get_bits(data, 552, 0, 15)
