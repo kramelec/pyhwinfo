@@ -75,12 +75,12 @@ class WindowMemory():
         style.configure("TRadiobutton", font=('Segoe UI', 10))
         style.configure('Section.TLabelframe.Label', font=('Segoe UI', 9))
         style.configure('Value.TLabel', font=('Consolas', 10))
-        style.configure('val.TLabel', font=('Consolas', 10), padding=0, background="white", foreground="black", relief="groove", borderwidth=2)
+        style.configure('val.TLabel', font=('Consolas', 10), padding=1, background="white", foreground="black", relief="groove", borderwidth=2)
         style.configure('Small.TLabel', font=('Consolas', 8))
 
         style.configure('fixT.TLabel', font=('Intel One Mono Medium', 10), padding=0)
         style.configure('fixV.TLabel', font=('Intel One Mono Medium', 10), padding=0, background="white", foreground="black", relief="groove", borderwidth=2)
-        style.configure('fixV2.TLabel', font=('Segoe UI', 9), padding=0, background="white", foreground="black", relief="groove", borderwidth=2)
+        style.configure('fixV2.TLabel', font=('Segoe UI', 10), padding=0, background="white", foreground="black", relief="groove", borderwidth=2)
         style.configure('fixA.TLabel', font=('Intel One Mono Medium', 8))
 
     def create_window(self):
@@ -113,7 +113,7 @@ class WindowMemory():
         mb_label.pack(side=tk.LEFT, padx = 5, pady = 1)
         
         dimm_frame = ttk.LabelFrame(main_frame, text="DIMM", style='Section.TLabelframe')
-        dimm_frame.pack(fill=tk.X, pady=4)
+        dimm_frame.pack(fill=tk.X, pady=3)
         
         dimm_frame2 = ttk.Frame(dimm_frame)
         dimm_frame2.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=0, pady=0)
@@ -149,13 +149,13 @@ class WindowMemory():
             vv.pmic_vendor_list.append( pmic_var )
             ttk.Label(frame, text=size, style=vstyle, width=6, anchor=anchor).pack(side=tk.LEFT)
             ttk.Label(frame, text=model_t, style='Title.TLabel', width=6, anchor='e').pack(side=tk.LEFT)
-            ttk.Label(frame, textvariable=dram_var, style=vstyle2, width=40, anchor='center').pack(side=tk.LEFT)
+            ttk.Label(frame, textvariable=dram_var, style=vstyle2, width=38, anchor='center').pack(side=tk.LEFT)
             ttk.Label(frame, text=mc_t, style='Title.TLabel', width=3, anchor='e').pack(side=tk.LEFT)
             ttk.Label(frame, text=mc, style=vstyle, width=2, anchor=anchor).pack(side=tk.LEFT)
             ttk.Label(frame, text=ch_t, style='Title.TLabel', width=3, anchor='e').pack(side=tk.LEFT)
             ttk.Label(frame, text=ch, style=vstyle, width=2, anchor=anchor).pack(side=tk.LEFT)
             ttk.Label(frame, text=pmic_t, style='Title.TLabel', width=5, anchor='e').pack(side=tk.LEFT)
-            ttk.Label(frame, textvariable=pmic_var, style=vstyle2, width=20, anchor='center').pack(side=tk.LEFT)
+            ttk.Label(frame, textvariable=pmic_var, style=vstyle2, width=15, anchor='center').pack(side=tk.LEFT)
             
         self.dimm_map = { }
         dnum = 0
@@ -204,14 +204,14 @@ class WindowMemory():
             vv.dimm_radio.set(str(self.current_slot))
         
         freq_volt_frame = ttk.Frame(main_frame)
-        freq_volt_frame.pack(fill=tk.X, pady=5)
+        freq_volt_frame.pack(fill=tk.X, pady=0)
 
         freq_chan_frame = ttk.Frame(freq_volt_frame)
         freq_chan_frame.pack(side=tk.LEFT, fill=tk.Y, expand=False, padx=3)
         
         # Frequency information
         freq_frame = ttk.LabelFrame(freq_chan_frame, text="Frequency", style='Section.TLabelframe')
-        freq_frame.pack(side=tk.TOP, fill=tk.Y, expand=False, padx=5)
+        freq_frame.pack(side=tk.TOP, fill=tk.Y, expand=False, padx=5, pady=0)
 
         def create_freq_col(vlist: list, w, anchor = 'center'):
             nonlocal freq_frame
@@ -235,7 +235,7 @@ class WindowMemory():
         create_freq_col([ "", "MCLK", "UCLK" ], w = 5)
         create_freq_col([ "Rate", vv.MCLK_RATIO, vv.UCLK_RATIO ], w = 6)
         create_freq_col([ "", "x", "x" ], w = 1)
-        create_freq_col([ "BCLK", vv.BCLK, vv.BCLK ], w = 7)
+        create_freq_col([ "BCLK", vv.BCLK, vv.BCLK ], w = 8)
         create_freq_col([ "", "=", "=" ], w = 1)
         create_freq_col([ "Frequency", vv.MCLK_FREQ, vv.UCLK_FREQ ], w = 10)
         create_freq_col([ "", "MHz", "MHz" ], w = 4, anchor = tk.W)
@@ -259,7 +259,7 @@ class WindowMemory():
         
         # Sensors info
         sens_frame = ttk.LabelFrame(freq_volt_frame, text="DIMM Sensors", style='Section.TLabelframe')
-        sens_frame.pack(fill=tk.BOTH, expand=True, pady=3)
+        sens_frame.pack(fill=tk.BOTH, expand=True, pady=0)
         
         def create_sens_val(sframe, name, value, vt, w = 6):
             nonlocal vv
@@ -344,7 +344,7 @@ class WindowMemory():
         def create_mc_ch_combo(col, width = 8):
             nonlocal vv, mem
             frame = ttk.Frame(col)
-            frame.pack(fill=tk.X, pady=4)
+            frame.pack(fill=tk.X, pady=2)
             item_active = 0
             options = [ ]
             for mc in mem['mc']:
@@ -354,7 +354,7 @@ class WindowMemory():
                     options.append( f'MC #{mc_num}, CH #{ch_num}' )
                     if mc_num == self.current_mc and ch_num == self.current_ch:
                         item_active = len(options) - 1
-            vv.mc_ch_combobox = ttk.Combobox(frame, values=options, width = width + 3)
+            vv.mc_ch_combobox = ttk.Combobox(frame, values=options, width = width + 2)
             vv.mc_ch_combobox.pack(side=tk.LEFT, padx = 1)
             vv.mc_ch_combobox.current(item_active)
             vv.mc_ch_combobox.pack()
@@ -365,7 +365,7 @@ class WindowMemory():
             if not frame:
                 frame = base_timings_frame
             col = ttk.Frame(frame)
-            col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=8)
+            col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=3)
             for item in tlist:
                 value = ''
                 if isinstance(item, str):
@@ -446,12 +446,12 @@ class WindowMemory():
         create_col_timings(col_timings, wv = 6)
         
         adv_frame = ttk.Frame(timings_frame)
-        adv_frame.pack(fill=tk.BOTH, expand=True, pady=7, padx=5)
+        adv_frame.pack(fill=tk.BOTH, expand=True, pady=7, padx=3)
 
         def create_adv_timings(tlist, caption, wn = 9, wv = 5):
             nonlocal vv, adv_frame
             col = ttk.LabelFrame(adv_frame, text=caption, style='Section.TLabelframe')
-            col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=6)
+            col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=3)
             for name, value in tlist:
                 if name == '' or not name.startswith('t'):
                     var = str(value)
