@@ -551,17 +551,15 @@ class WindowMemory():
             slot_count += 1
             spd = elem['SPD']
             if spd:
-                vid = spd['vendorid']
-                vendor = '0x%04X' % vid
-                if vid in DRAM_VENDOR_ID_DICT: 
-                    vendor = DRAM_VENDOR_ID_DICT[vid]['name']
+                vendor = spd['vendor']
+                if not vendor:
+                    vendor = '0x%04X' % spd['vendorid']
                 ranks = '  (' + str(spd['ranks']) + 'R)'
                 vv.dram_model_list[slot].value = vendor + '  ' + spd['part_number'] + ranks
             if 'PMIC' in elem and elem['PMIC']:
-                pmic_vid = elem['PMIC']['vid']
-                vendor = '0x%04X' % pmic_vid
-                if pmic_vid in PMIC_VENDOR_ID_DICT:
-                    vendor = PMIC_VENDOR_ID_DICT[pmic_vid]['name']
+                vendor = elem['PMIC']['vendor']
+                if not vendor:
+                    vendor = '0x%04X' % elem['PMIC']['vid']
                 vv.pmic_vendor_list[slot].value = vendor
                 
         vv.BCLK.value = mem['BCLK_FREQ']

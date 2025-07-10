@@ -11,6 +11,8 @@ import ctypes.wintypes as wintypes
 
 from cpuidsdk64.win32 import *
 
+from jep106 import *
+
 def spd_eeprom_decode(data):
     if isinstance(data, str):
         data = bytes.fromhex(data)
@@ -91,7 +93,8 @@ def spd_eeprom_decode(data):
         pkg['bank_groups'] = 1 << bank_grp   # bank groups
 
     out['spd_revision']  = str(get_bits(data, 192, 4, 7)) + '.' + str(get_bits(data, 1, 0, 3))
-    out['spd_vendorid']  = get_bits(data, 194, 0, 15)
+    out['spd_vendorid'] = jep106decode(get_bits(data, 194, 0, 15))
+    out['spd_vendor'] = jep106[out['spd_vendorid']] if out['spd_vendorid'] in jep106 else None
     out['spd_dev_type']  = get_bits(data, 196, 0, 7)
     out['spd_dev_rev']   = get_bits(data, 197, 0, 7)
     
@@ -100,14 +103,16 @@ def spd_eeprom_decode(data):
         x = 198 + pmic_num * 4
         pmic = { 'number': pmic_num }
         pmic_list.append( pmic )
-        pmic['vendorid'] = get_bits(data, x, 0, 15)
+        pmic['vendorid'] = jep106decode(get_bits(data, x, 0, 15))
+        pmic['vendor'] = jep106[pmic['vendorid']] if pmic['vendorid'] in jep106 else None
         pmic['dev_type'] = get_bits(data, x+2, 0, 7)
         pmic['dev_rev']  = get_bits(data, x+3, 0, 7)
 
     out['ranks'] = get_bits(data, 234, 3, 5) + 1
     out['rank_mix'] = 'asymmetrical' if get_bits(data, 234, 6) else 'symmetrical'
     
-    out['vendorid'] = get_bits(data, 512, 0, 15)
+    out['vendorid'] = jep106decode(get_bits(data, 512, 0, 15))
+    out['vendor'] = jep106[out['vendorid']] if out['vendorid'] in jep106 else None
     out['manuf_date'] = get_bits(data, 515, 0, 15)
     out['serial_number'] = data[517:517+2].hex().upper() + '-' + data[519:519+2].hex().upper()
     out['part_number'] = data[521:551].decode('latin-1').strip()

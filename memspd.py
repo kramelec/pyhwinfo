@@ -17,6 +17,7 @@ __author__ = 'remittor'
 
 from cpuidsdk64 import *
 from hardware import *
+from jep106 import *
 
 LOCAL_SMBUS_MUTEX_NAME  = r"Local\Access_SMBUS.HTP.Method"
 GLOBAL_SMBUS_MUTEX_NAME = r"Global\Access_SMBUS.HTP.Method"
@@ -245,13 +246,15 @@ def mem_pmic_read(slot):
             if rc != 0:
                 print('ERROR: PMIC not inited!')
                 return None
-        vid_LO = smbus_read_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, PMIC_RICHTEK_R3C)  # PMIC Vendor ID
-        vid_HI = smbus_read_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, PMIC_RICHTEK_R3C + 1)
-        vid = (vid_HI << 8) + vid_LO
-        print(f'PMIC Vendor ID = 0x{vid:04X}')
+        vid_HI = smbus_read_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, PMIC_RICHTEK_R3C)  # PMIC Vendor ID
+        vid_LO = smbus_read_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, PMIC_RICHTEK_R3C + 1)
+        vid = jep106decode(vid_HI, vid_LO)
+        vendor = jep106[vid] if vid in jep106 else None
+        print(f'PMIC Vendor ID = 0x{vid:04X} "{vendor}"')
         out['vid'] = vid
+        out['vendor'] = vendor 
         
-        if vid != 0x8C8A:   # Richtek
+        if vid != 0x0A0C:   # Richtek
             print(f'ERROR: pmic 0x{vid:04X} not supported')
             return out
 
@@ -449,15 +452,18 @@ def get_mem_spd_info(slot, mem_info: dict, with_pmic = True):
         g_smbus['pch_name'] = smbus_dev_name
         g_smbus['port'] = smb_addr
 
-    spd_vid = mem_spd_read_reg(slot, SPD5_MR3, 2)  # MR3 + MR4 => Vendor ID
-    if not spd_vid:
+    vendorid = mem_spd_read_reg(slot, SPD5_MR3, 2)  # MR3 + MR4 => Vendor ID
+    if not vendorid:
         return None
 
+    spd_vid = jep106decode(vendorid)
+
     print(f'Scan DIMM slot #{slot}')
-    print(f'SPD Vendor ID = 0x{spd_vid:04X}')
     spd["slot"] = slot
     spd["smbus_dev"] = SMBUS_SPD_DEVICE + slot
     spd["spd_vid"] = spd_vid
+    spd["spd_vendor"] = jep106[spd_vid] if spd_vid in jep106 else None
+    print(f'SPD Vendor ID = 0x{spd_vid:04X} "{spd["spd_vendor"]}"')
 
     val = mem_spd_read_reg(slot, SPD5_MR18)  # Device Configuration
     PEC_EN = get_bits(val, 0, 7)

@@ -63,24 +63,3 @@ PCI_ID_SMBUS_INTEL = {
     0xe322: {'name': 'INTEL_PANTHER_LAKE_H_SMBUS' },
     0xe422: {'name': 'INTEL_PANTHER_LAKE_P_SMBUS' },
 }
-
-# ref: https://github.com/coreboot/coreboot/blob/a60c5d205bf70af00ed2f5075079fd0c2f9aadc3/util/spdtool/spdtool.py#L58
-DRAM_VENDOR_ID_DICT = {
-    0x2c80: { 'name': "Crucial/Micron" },
-    0x4304: { 'name': "Ramaxel" },
-    0x4f01: { 'name': "Transcend" },
-    0x9801: { 'name': "Kingston" },
-    0x987f: { 'name': "Hynix" },
-    0x9e02: { 'name': "Corsair" },
-    0xb004: { 'name': "OCZ" },
-    0xad80: { 'name': "Hynix/Hyundai" },
-    0xb502: { 'name': "SuperTalent" },
-    0xcd04: { 'name': "GSkill" },
-    0xce80: { 'name': "Samsung" },
-    0xfe02: { 'name': "Elpida" },
-    0xff2c: { 'name': "Micron" },
-}
-
-PMIC_VENDOR_ID_DICT = {
-    0x8C8A: { 'name': "Richtek" },
-}
