@@ -725,6 +725,6 @@ if __name__ == "__main__":
     SdkInit(None, 0)
     out = get_mem_info()
     #print(json.dumps(memory, indent = 4))
-    with open('IMC.json', 'w') as file:
+    with open('IMC_mini.json', 'w') as file:
         json.dump(out, file, indent = 4)
     

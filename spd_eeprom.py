@@ -117,7 +117,8 @@ def spd_eeprom_decode(data):
     out['serial_number'] = data[517:517+2].hex().upper() + '-' + data[519:519+2].hex().upper()
     out['part_number'] = data[521:551].decode('latin-1').strip()
     out['module_rev'] = get_bits(data, 551, 0, 7)
-    out['die_vendorid'] = get_bits(data, 552, 0, 15)
+    out['die_vendorid'] = jep106decode(get_bits(data, 552, 0, 15))
+    out['die_vendor'] = jep106[out['die_vendorid']] if out['die_vendorid'] in jep106 else None
     out['die_stepping'] = get_bits(data, 554, 0, 7)
     
     return out
