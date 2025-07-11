@@ -50,24 +50,8 @@ def spd_eeprom_decode(data):
         pkg = { 'number': pkg_num }
         pkg_list.append( pkg )
         die_cap = get_bits(data, x, 0, 4)
-        if die_cap == 0x01:
-            pkg['die_size'] = 4
-        elif die_cap == 0x02:
-            pkg['die_size'] = 8
-        elif die_cap == 0x03:
-            pkg['die_size'] = 12
-        elif die_cap == 0x04:
-            pkg['die_size'] = 16
-        elif die_cap == 0x05:
-            pkg['die_size'] = 24
-        elif die_cap == 0x06:
-            pkg['die_size'] = 32
-        elif die_cap == 0x07:
-            pkg['die_size'] = 48
-        elif die_cap == 0x08:
-            pkg['die_size'] = 64
-        else:
-            pkg['die_size'] = None
+        die_size_list = [ None, 4, 8, 12, 16, 24, 32, 48, 64 ]
+        pkg['die_size'] = die_size_list[die_cap] if die_cap < len(die_size_list) else None
         die_per_pkg = get_bits(data, x, 5, 7)
         if die_per_pkg == 0x00:
             pkg['die_per_pkg'] = 'MONO'  # Monoliphic

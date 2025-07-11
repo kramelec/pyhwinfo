@@ -507,10 +507,13 @@ class WindowMemory():
 
         col_timings = [ "X8_DEVICE" , "N_TO_1_RATIO", "ADD_1QCLK_DELAY", ]
         create_col_timings(col_timings, wn = 15, frame = ext_timings_frame)
-        
-        # Refresh button
+
         btn_frame = ttk.Frame(main_frame)
         btn_frame.pack(fill=tk.X, pady=6)
+
+        btn_dump = ttk.Button(btn_frame, text="Dump to file", command = self.button_click_dump)
+        btn_dump.pack(side=tk.LEFT)
+
         btn_refresh = ttk.Button(btn_frame, text="Refresh", command = self.button_click_refresh)
         btn_refresh.pack(side=tk.RIGHT)
 
@@ -726,6 +729,14 @@ class WindowMemory():
         mc_num = int(xx[0].split('#')[1].strip())
         ch_num = int(xx[1].split('#')[1].strip())
         self.update(slot_id = self.current_slot, mc_id = mc_num, ch_id = ch_num)
+
+    def button_click_dump(self):
+        from datetime import datetime
+        print("Button Dump clicked!")
+        dt = datetime.now().strftime("%Y-%m-%d_%H%M")
+        fn = f'IMC_{dt}.json'
+        with open(fn, 'w') as file:
+            json.dump(self.mem_info, file, indent = 4)
 
 if __name__ == "__main__":
     test = False
