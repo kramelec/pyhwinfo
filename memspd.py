@@ -12,6 +12,7 @@ import ctypes.wintypes as wintypes
 from ctypes import byref
 from types import SimpleNamespace
 import json
+from datetime import datetime
 
 __author__ = 'remittor'
 
@@ -523,6 +524,7 @@ def get_mem_spd_all(mem_info: dict, with_pmic = True, allinone = True):
     if allinone:
         mem_info['memory']['SMBus'] = copy.deepcopy(dimm['SMBus'])
         mem_info['memory']['DIMM']  = copy.deepcopy(dimm['DIMM'])
+        mem_info['time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         return mem_info
     return dimm
 

@@ -733,7 +733,11 @@ class WindowMemory():
     def button_click_dump(self):
         from datetime import datetime
         print("Button Dump clicked!")
-        dt = datetime.now().strftime("%Y-%m-%d_%H%M")
+        if 'time' in self.mem_info:
+            dt = datetime.strptime(self.mem_info['time'], "%Y-%m-%d %H:%M:%S")
+            dt = dt.strftime("%Y-%m-%d_%H%M")
+        else:
+            dt = datetime.now().strftime("%Y-%m-%d_%H%M")
         fn = f'IMC_{dt}.json'
         with open(fn, 'w') as file:
             json.dump(self.mem_info, file, indent = 4)
