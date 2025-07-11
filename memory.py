@@ -72,6 +72,8 @@ def get_mchbar_info(info, controller, channel):
         IMC_REFRESH_TC = 0x43C     # Refresh timing parameters
         tm["tREFI"] = get_bits(data, IMC_REFRESH_TC, 0, 17)
         tm["tRFC"]  = get_bits(data, IMC_REFRESH_TC, 18, 30)
+        tm["tRFC2"] = None
+        tm["tRFC4"] = None
         IMC_REFRESH_AUX = 0x438
         tm["oref_ri"]  = get_bits(data, IMC_REFRESH_AUX, 0, 7)
         tm["REFRESH_HP_WM"]  = get_bits(data, IMC_REFRESH_AUX, 8, 11)
@@ -240,6 +242,11 @@ def get_undoc_params(tm, info, controller, channel):
     tm["FineGranularityRefresh"] = True
     if tm["REFRESH_HP_WM"] == 4 and tm["REFRESH_PANIC_WM"] == 5:
         tm["FineGranularityRefresh"] = False
+
+    if info["DDR_TYPE"] == DDR_TYPE.DDR5 and tm["FineGranularityRefresh"] == True:
+        tRFC = tm["tRFC"]
+        tm["tRFC"] = None
+        tm["tRFC2"] = tRFC  # Fine Granularity Refresh mode uses tRFC2 
 
     ''' # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # func "SetTcPreActOdt"
       // tWRPRE is = tCWL + BLn/2 + tWR

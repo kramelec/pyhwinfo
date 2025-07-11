@@ -621,8 +621,8 @@ class WindowMemory():
         vv.tRC.value = ci['tRAS'] + ci['tRP']
         vv.tCR.value = ci['tCR']
         vv.tCWL.value = ci['tCWL']
-        vv.tRFC.value = ci['tRFC']
-        vv.tRFC2.value = ''
+        vv.tRFC.value = ci['tRFC'] if ci['tRFC'] else ''
+        vv.tRFC2.value = ci['tRFC2'] if ci['tRFC2'] else ''
         vv.tRFCpb.value = ci['tRFCpb']
         vv.tXSR.value = ci['tXSR']
         vv.tREFI.value = ci['tREFI']
