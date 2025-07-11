@@ -277,6 +277,9 @@ def get_undoc_params(tm, info, controller, channel):
     else:
         raise RuntimeError()
 
+def VrefPercentDecode(index):  # ref: ICÈ_TÈA_BIOS enum DDR5_MR10_VREF
+    return 97.5 - index / 2
+
 DDR5_MR_List = [
     'MR0',
     'MR1',        # Not inited
@@ -316,6 +319,7 @@ DDR5_MR_List = [
     'MR40',
     'MR41',       # Not inited
     'MR42',       # Not inited
+    'MR43',
     'MR45',
     'MR48',
     'MR54',       # Not inited
@@ -343,7 +347,7 @@ DDR5_MR_List = [
     'MpcZqLat',
     'MpcEnterCaTrainMode',
     'MpcSetCmdTiming',
-    'MpcSelectAllPDA',
+    'MpcSelectAllPDA',  # value = 0x7F
 ]
 
 def get_mrs_storage(data, tm, info, controller, channel):
@@ -353,8 +357,28 @@ def get_mrs_storage(data, tm, info, controller, channel):
     GEN_MRS_FSM_STORAGE_MAX = 60   # 60 Storage registers
     GEN_MRS_FSM_BYTE_MAX    = 240  # 60 Registers * 4 Bytes per register         
     mrs_data = data[IMC_MRS_FSM_STORAGE:IMC_MRS_FSM_STORAGE+GEN_MRS_FSM_BYTE_MAX]
-    #print('msr:', mrs_data.hex())
+    mrs_hex_list = [ '%02X' % get_bits(mrs_data, i, 0, 7) for i in range(0, len(mrs_data)) ]
+    tm['mrs_data'] = ''
+    tm['mrs_size'] = 0
+    mrs_size = 0
+    for pos in range(len(mrs_hex_list)-1, 0, -1):
+        if mrs_hex_list[pos] != '00':
+            mrs_size = pos + 1
+            break
+    if mrs_size > 0:
+        mrs_hex_list = mrs_hex_list[:mrs_size]
+        tm['mrs_data'] = ' '.join(mrs_hex_list)
+        tm['mrs_size'] = mrs_size
     mr = tm['MRS'] = { }
+    if mrs_size <= 0:
+        return  # MRS not inited
+    if mrs_hex_list[-1] != '7F':
+        return  # unknown struct of MRS
+    if mrs_size + 2 == len(DDR5_MR_List):
+        DDR5_MR_List.remove('MR43')
+        DDR5_MR_List.remove('MR29')
+    if mrs_size != len(DDR5_MR_List):
+        return  # unknown struct of MRS
     MR0 = DDR5_MR_List.index('MR0')
     mr["BurstLength"] = get_bits(mrs_data, MR0, 0, 1)
     CasLatency = get_bits(mrs_data, MR0, 2, 6)
@@ -369,8 +393,13 @@ def get_mrs_storage(data, tm, info, controller, channel):
     tRTP = get_bits(mrs_data, MR6, 4, 7)
     RTP_list = [ 12, 14, 15, 17, 18, 20, 21, 23, 24 ]
     mr["tRTP"] = RTP_list[tRTP] if tRTP < len(RTP_list) else None
+    mr["VrefDqCalibrationValue"] = VrefPercentDecode(get_bits(mrs_data, DDR5_MR_List.index('MR10'), 0, 7))
+    mr["VrefCaCalibrationValue"] = VrefPercentDecode(get_bits(mrs_data, DDR5_MR_List.index('MR11'), 0, 6))
+    mr["VrefCsCalibrationValue"] = VrefPercentDecode(get_bits(mrs_data, DDR5_MR_List.index('MR12'), 0, 6))
+    mr["mr12b"] = get_bits(mrs_data, DDR5_MR_List.index('MR12Upper'), 0, 7)
+    mr["mr12b_percent"] = VrefPercentDecode(get_bits(mrs_data, DDR5_MR_List.index('MR12Upper'), 0, 7))
     MR13 = DDR5_MR_List.index('MR13')
-    mr["tCCD_L_tDLLK"] = get_bits(mrs_data, MR13, 0, 3)
+    mr["tCCD_L_tDLLK"] = get_bits(mrs_data, MR13, 0, 7)
     MR34 = DDR5_MR_List.index('MR34')
     mr["RttPark"] = get_bits(mrs_data, MR34, 0, 2)
     mr["RttWr"] = get_bits(mrs_data, MR34, 3, 5)
@@ -400,6 +429,7 @@ def get_mrs_storage(data, tm, info, controller, channel):
     mr["ZQCAL_LATCH"] = get_bits(mrs_data, DDR5_MR_List.index('MpcZqLat'), 0, 7)
     mr["ENTER_CA_TRAINING_MODE"] = get_bits(mrs_data, DDR5_MR_List.index('MpcEnterCaTrainMode'), 0, 7)
     mr["SetCmdTiming"] = get_bits(mrs_data, DDR5_MR_List.index('MpcSetCmdTiming'), 0, 7)
+    mr["SelectAllPDA"] = get_bits(mrs_data, DDR5_MR_List.index('MpcSelectAllPDA'), 0, 7)
 
 def get_mem_ctrl(ctrl_num):
     global gdict, proc_fam, proc_model_id, MCHBAR_BASE
