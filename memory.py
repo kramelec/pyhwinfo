@@ -277,6 +277,75 @@ def get_undoc_params(tm, info, controller, channel):
     else:
         raise RuntimeError()
 
+DDR5_MR_List = [
+    'MR0',
+    'MR1',        # Not inited
+    'MR2',
+    'MR3',
+    'MR4',
+    'MR5',
+    'MR6',
+    'MR8',
+    'MR10',
+    'MR11',
+    'MR12',
+    'MR12Upper', # This is specific to LPDDR5 where we can configure CA Vref on each Byte with Byte-Mode devices.
+    'MR13',
+    'MR14',       # Not inited
+    'MR15',       # Not inited
+    'MR16',       # Not inited
+    'MR17',       # Not inited
+    'MR18',       # Not inited
+    'MR20',       # Not inited
+    'MR21',       # Not inited
+    'MR22',       # Not inited
+    'MR23',       # Not inited
+    'MR24',       # Not inited
+    'MR25',       # Not inited
+    'MR26',       # Not inited
+    'MR27',       # Not inited
+    'MR28',       # Not inited
+    'MR29',       # Not inited
+    'MR30',       # Not inited
+    'MR34',
+    'MR35',
+    'MR36',
+    'MR37',
+    'MR38',
+    'MR39',
+    'MR40',
+    'MR41',       # Not inited
+    'MR42',       # Not inited
+    'MR45',
+    'MR48',
+    'MR54',       # Not inited
+    'MR55',       # Not inited
+    'MR56',       # Not inited
+    'MR57',       # Not inited
+    'MR58',       # Not inited
+    'MR59',       # Not inited
+    'MR129',      # Not inited
+    'MR130',      # Not inited
+    'MR131',      # Not inited
+    'MR132',      # Not inited
+    'MpcMr13',    # Not inited
+    'MpcMr32a0',
+    'MpcMr32a1',
+    'MpcMr32b0',
+    'MpcMr32b1',
+    'MpcMr33a0',
+    'MpcMr33',
+    'MpcMr33b0',
+    'MpcMr34',
+    'MpcApplyVrefCa',
+    'MpcDllReset',
+    'MpcZqCal',
+    'MpcZqLat',
+    'MpcEnterCaTrainMode',
+    'MpcSetCmdTiming',
+    'MpcSelectAllPDA',
+]
+
 def get_mrs_storage(data, tm, info, controller, channel):
     # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # file "MrcMcRegisterStructAdlExxx.h" + "MrcDdr5Registers.h"
     IMC_MRS_FSM_STORAGE = 0x200
@@ -286,31 +355,51 @@ def get_mrs_storage(data, tm, info, controller, channel):
     mrs_data = data[IMC_MRS_FSM_STORAGE:IMC_MRS_FSM_STORAGE+GEN_MRS_FSM_BYTE_MAX]
     #print('msr:', mrs_data.hex())
     mr = tm['MRS'] = { }
-    MR0 = 0*4
+    MR0 = DDR5_MR_List.index('MR0')
     mr["BurstLength"] = get_bits(mrs_data, MR0, 0, 1)
     CasLatency = get_bits(mrs_data, MR0, 2, 6)
     mr["CasLatency"] = 22 + CasLatency * 2
-    MR4 = 4*4
+    MR4 = DDR5_MR_List.index('MR4')
     mr["RefreshRate"] = get_bits(mrs_data, MR4, 0, 2)
     mr["RefreshTrfcMode"] = get_bits(mrs_data, MR4, 4, 4)
     mr["Tuf"] = get_bits(mrs_data, MR4, 7)
-    MR6 = 6*4
+    MR6 = DDR5_MR_List.index('MR6')
     WriteRecoveryTime = get_bits(mrs_data, MR6, 0, 3)
     mr["WriteRecoveryTime"] = 48 + WriteRecoveryTime * 6
     tRTP = get_bits(mrs_data, MR6, 4, 7)
-    RTP_map = [ 12, 14, 15, 17, 18, 20, 21, 23, 24 ]
-    mr["tRTP"] = RTP_map[tRTP] 
-    MR13 = 12*4
+    RTP_list = [ 12, 14, 15, 17, 18, 20, 21, 23, 24 ]
+    mr["tRTP"] = RTP_list[tRTP] if tRTP < len(RTP_list) else None
+    MR13 = DDR5_MR_List.index('MR13')
     mr["tCCD_L_tDLLK"] = get_bits(mrs_data, MR13, 0, 3)
-    MR33 = 28*4
-    mr["CaOdt"] = get_bits(mrs_data, MR33, 0, 2)
-    mr["DqsRttPark"] = get_bits(mrs_data, MR33, 3, 5)
-    MR34 = 29*4
+    MR34 = DDR5_MR_List.index('MR34')
     mr["RttPark"] = get_bits(mrs_data, MR34, 0, 2)
     mr["RttWr"] = get_bits(mrs_data, MR34, 3, 5)
-    MR35 = 30*4
+    MR35 = DDR5_MR_List.index('MR35')
     mr["RttNomWr"] = get_bits(mrs_data, MR35, 0, 2)
     mr["RttNomRd"] = get_bits(mrs_data, MR35, 3, 5)
+    mr["RttLoopback"]       = get_bits(mrs_data, DDR5_MR_List.index('MR36'), 0, 2)
+    mr["OdtlOnWrOffset"]    = get_bits(mrs_data, DDR5_MR_List.index('MR37'), 0, 2)
+    mr["OdtlOffWrOffset"]   = get_bits(mrs_data, DDR5_MR_List.index('MR37'), 3, 5)
+    mr["OdtlOnWrNtOffset"]  = get_bits(mrs_data, DDR5_MR_List.index('MR38'), 0, 2)
+    mr["OdtlOffWrNtOffset"] = get_bits(mrs_data, DDR5_MR_List.index('MR38'), 3, 5)
+    mr["OdtlOnRdNtOffset"]  = get_bits(mrs_data, DDR5_MR_List.index('MR39'), 0, 2)
+    mr["OdtlOffRdNtOffset"] = get_bits(mrs_data, DDR5_MR_List.index('MR39'), 3, 5)
+    mr["ReadDqsOffsetTiming"] = get_bits(mrs_data, DDR5_MR_List.index('MR40'), 0, 2)
+    mr["DqsIntervalTimerRunTime"] = get_bits(mrs_data, DDR5_MR_List.index('MR45'), 0, 7)
+    mr["RttCk_A"] = get_bits(mrs_data, DDR5_MR_List.index('MpcMr32a0'), 0, 2)
+    mr["RttCk_B"] = get_bits(mrs_data, DDR5_MR_List.index('MpcMr32b0'), 0, 2)
+    mr["RttCs_A"] = get_bits(mrs_data, DDR5_MR_List.index('MpcMr32a1'), 0, 2)
+    mr["RttCs_B"] = get_bits(mrs_data, DDR5_MR_List.index('MpcMr32b1'), 0, 2)
+    mr["RttCa_A"] = get_bits(mrs_data, DDR5_MR_List.index('MpcMr33a0'), 0, 2)
+    mr["RttCa_B"] = get_bits(mrs_data, DDR5_MR_List.index('MpcMr33b0'), 0, 2)
+    mr["_RttParkDqs"] = get_bits(mrs_data, DDR5_MR_List.index('MpcMr33'), 0, 2)
+    mr["_RttPark"] = get_bits(mrs_data, DDR5_MR_List.index('MpcMr34'), 0, 2)
+    mr["ApplyVrefCa"] = get_bits(mrs_data, DDR5_MR_List.index('MpcApplyVrefCa'), 0, 7)
+    mr["DllReset"] = get_bits(mrs_data, DDR5_MR_List.index('MpcDllReset'), 0, 7)
+    mr["ZQCAL_START"] = get_bits(mrs_data, DDR5_MR_List.index('MpcZqCal'), 0, 7)
+    mr["ZQCAL_LATCH"] = get_bits(mrs_data, DDR5_MR_List.index('MpcZqLat'), 0, 7)
+    mr["ENTER_CA_TRAINING_MODE"] = get_bits(mrs_data, DDR5_MR_List.index('MpcEnterCaTrainMode'), 0, 7)
+    mr["SetCmdTiming"] = get_bits(mrs_data, DDR5_MR_List.index('MpcSetCmdTiming'), 0, 7)
 
 def get_mem_ctrl(ctrl_num):
     global gdict, proc_fam, proc_model_id, MCHBAR_BASE
