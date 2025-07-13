@@ -396,6 +396,9 @@ def get_mrs_storage(data, tm, info, controller, channel):
             mr["RttLoopback"] = OdtDecode(get_bits(mrs_data, MR36, 0, 2))
         else:
             pass # FIXME
+
+    DDR5_MPC_SET_2N_COMMAND_TIMING   = 0x08
+    DDR5_MPC_SET_1N_COMMAND_TIMING   = 0x09
     
     DDR5_MPC_RTT_MASK = 0x07
     DDR5_MPC_GROUP_A_RTT_CK   = 0x20
@@ -407,8 +410,6 @@ def get_mrs_storage(data, tm, info, controller, channel):
     DDR5_MPC_SET_DQS_RTT_PARK = 0x50
     DDR5_MPC_SET_RTT_PARK     = 0x58
     DDR5_MPC_CFG_TDLLK_TCCD_L = 0x80  # Mask = 0x0F
-    
-    mrs = [ get_bits(mrs_data, pos, 0, 7) for pos in range(0, 16) ]
     
     def rttCx_check_and_read(start, pattern):
         nonlocal mrs_data
@@ -432,6 +433,12 @@ def get_mrs_storage(data, tm, info, controller, channel):
                 continue
             if vtype == 'MR13' and (value & 0xF0) == DDR5_MPC_CFG_TDLLK_TCCD_L:
                 val = DDR5_MR13_decode(value)
+            if vtype == 'mpcSetCmdTiming':
+                val = ''
+                if value == DDR5_MPC_SET_2N_COMMAND_TIMING:
+                    val = '2N'
+                if value == DDR5_MPC_SET_1N_COMMAND_TIMING:
+                    val = '1N'
             if vtype == 'CKa' and (value & ~DDR5_MPC_RTT_MASK) == DDR5_MPC_GROUP_A_RTT_CK:
                 val = CccOdtDecode(value & DDR5_MPC_RTT_MASK)
             if vtype == 'CKb' and (value & ~DDR5_MPC_RTT_MASK) == DDR5_MPC_GROUP_B_RTT_CK:
@@ -469,7 +476,8 @@ def get_mrs_storage(data, tm, info, controller, channel):
     rttCx = None
     pattern_Cx_dict = {
         'Cx_new': [
-            'MR13=MR13', '?',
+            'MR13=MR13',
+            'mpcSetCmdTiming=CmdTiming',
             'CKa=RttCK_A',
             'CSa=RttCS_A',
             'CAa=RttCA_A',
@@ -478,7 +486,8 @@ def get_mrs_storage(data, tm, info, controller, channel):
             'CAb=RttCA_B',
         ],
         'Cx_newLong': [
-            'MR13=MR13', '?',
+            'MR13=MR13',
+            'mpcSetCmdTiming=CmdTiming',
             'CKa=RttCK_A#0', 'CKa=RttCK_A#1',
             'CSa=RttCS_A#0', 'CSa=RttCS_A#1',
             'CAa=RttCA_A#0', 'CAa=RttCA_A#1',
