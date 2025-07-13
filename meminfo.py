@@ -508,6 +508,45 @@ class WindowMemory():
         col_timings = [ "X8_DEVICE" , "N_TO_1_RATIO", "ADD_1QCLK_DELAY", ]
         create_col_timings(col_timings, wn = 15, frame = ext_timings_frame)
 
+        # ODT section
+        odt_frame = ttk.Frame(timings_frame)
+        odt_frame.pack(fill=tk.BOTH, expand=True, pady=2)
+
+        odt_rtt_frame = ttk.LabelFrame(odt_frame, text="ODT Rtt", style='Section.TLabelframe')
+        odt_rtt_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=2, padx=3)
+
+        odt_cxA_frame = ttk.LabelFrame(odt_frame, text="ODT Cfg Group A", style='Section.TLabelframe')
+        odt_cxA_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=2, padx=3)
+
+        odt_cxB_frame = ttk.LabelFrame(odt_frame, text="ODT Cfg Group B", style='Section.TLabelframe')
+        odt_cxB_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=2, padx=3)
+
+        def create_odt_val(frame, group, tlist, wn = 8, wv = 4):
+            nonlocal vv
+            col = ttk.Frame(frame)
+            col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=3)
+            for name in tlist:
+                vvname = 'ODT_' + name
+                if group:
+                    vvname += f'_{group}'
+                var0 = WinVar('')
+                setattr(vv, vvname + '__0', var0)
+                var1 = WinVar('')
+                setattr(vv, vvname + '__1', var1)
+                _wn = wn
+                _wv = wv
+                frame = ttk.Frame(col)
+                frame.pack(fill=tk.X, pady=1)
+                ttk.Label(frame, text=name, style='fixT.TLabel', width=_wn, anchor=tk.W).pack(side=tk.LEFT)
+                ttk.Label(frame, textvariable=var0,  style='fixV.TLabel', width=_wv, anchor='center').pack(side=tk.LEFT)
+                if name != 'Loopback':
+                    ttk.Label(frame, textvariable=var1,  style='fixV.TLabel', width=_wv, anchor='center').pack(side=tk.LEFT)
+
+        create_odt_val(odt_rtt_frame, None, [ "Wr", "Park", "ParkDqs" ], wn = 7 )
+        create_odt_val(odt_rtt_frame, None, [ "NomRd", "NomWr", "Loopback" ], wn = 8 )
+        create_odt_val(odt_cxA_frame, 'A', [ "CA", "CS", "CK" ], wn = 3 )
+        create_odt_val(odt_cxB_frame, 'B', [ "CA", "CS", "CK" ], wn = 3 )
+
         btn_frame = ttk.Frame(main_frame)
         btn_frame.pack(fill=tk.X, pady=6)
 
@@ -685,6 +724,39 @@ class WindowMemory():
         vv.X8_DEVICE.value = ci['X8_DEVICE']
         vv.N_TO_1_RATIO.value = ci['N_TO_1_RATIO']
         vv.ADD_1QCLK_DELAY.value = ci['ADD_1QCLK_DELAY']
+
+        def set_odt_val(mrs, mrs_name, name):
+            vv = self.vars
+            vvname0 = 'ODT_' + name + '__0'
+            vvname1 = 'ODT_' + name + '__1'
+            try:
+                vv0 = getattr(vv, vvname0)
+                vv1 = getattr(vv, vvname1)
+            except AttributeError:
+                return False
+            if mrs_name not in mrs:
+                return False
+            if isinstance(mrs[mrs_name], list):
+                vv0.value = mrs[mrs_name][0]
+                vv1.value = mrs[mrs_name][1]
+            else:
+                vv0.value = mrs[mrs_name]
+            return True
+        
+        if 'MRS' in ci and ci['MRS']:
+            mrs = ci['MRS']
+            set_odt_val(mrs, 'RttWr', "Wr")
+            set_odt_val(mrs, 'RttPark', "Park")
+            set_odt_val(mrs, 'RttParkDqs', "ParkDqs")
+            set_odt_val(mrs, 'RttLoopback', "Loopback")
+            set_odt_val(mrs, 'RttNomWr', "NomWr")
+            set_odt_val(mrs, 'RttNomRd', "NomRd")
+            set_odt_val(mrs, 'RttCK_A', "CK_A")
+            set_odt_val(mrs, 'RttCS_A', "CS_A")
+            set_odt_val(mrs, 'RttCA_A', "CA_A")
+            set_odt_val(mrs, 'RttCK_B', "CK_B")
+            set_odt_val(mrs, 'RttCS_B', "CS_B")
+            set_odt_val(mrs, 'RttCA_B', "CA_B")
 
         self.current_slot = slot_id
         self.current_mc = mc_id
