@@ -284,6 +284,20 @@ def get_undoc_params(tm, info, controller, channel):
     else:
         raise RuntimeError()
 
+def DDR5_ImpedanceDecode(value):
+    val_list = [ 34, 40, 48 ]
+    return val_list[value] if value < len(val_list) else None
+
+def DDR5_MR5_decode(value):
+    res = { }
+    res['DataOutputDisable'] = get_bits(value, 0, 0)
+    res['PullUpOutputDriverImpedance'] = DDR5_ImpedanceDecode(get_bits(value, 0, 1, 2))
+    res['PackageOutputDriverTestModeSupported'] = get_bits(value, 0, 3)
+    res['TDQS_Enable'] = get_bits(value, 0, 4)
+    res['DM_Enable'] = get_bits(value, 0, 5)
+    res['PullDownOutputDriverImpedance'] = DDR5_ImpedanceDecode(get_bits(value, 0, 6, 7))
+    return res
+
 def DDR5_MR13_decode(value):
     value = value & 0x0F
     mr13_table = {
@@ -507,21 +521,31 @@ def get_mrs_storage(data, tm, info, controller, channel):
         for key, value in rttCx.items():
             mr[key] = value
 
+    rttPark_start = 0
+    rttPark_size = 0
     rttPark = None
     if rttCx_pattern == 'Cx_new':
+        rttPark_start = rttCx_start + rttCx_size + 2
         pattern = [ 'ParkDqs=RttParkDqs', 'Park=RttPARK', ]
-        sz, res = rttCx_check_and_read(rttCx_start + rttCx_size + 2, pattern)
+        sz, res = rttCx_check_and_read(rttPark_start, pattern)
         if sz == len(pattern):
             rttPark = res
+            rttPark_size = len(pattern)
     if rttCx_pattern == 'Cx_newLong':
+        rttPark_start = rttCx_start + rttCx_size + 2*2
         pattern = [ 'ParkDqs=RttParkDqs#0', 'ParkDqs=RttParkDqs#1', 'Park=RttPARK#0', 'Park=RttPARK#1', ]
-        sz, res = rttCx_check_and_read(rttCx_start + rttCx_size + 2*2, pattern)
+        sz, res = rttCx_check_and_read(rttPark_start, pattern)
         if sz == len(pattern):
             rttPark = res
+            rttPark_size = len(pattern)
     if rttPark:
         for key, value in rttPark.items():
             mr[key] = value
-            
+    
+    if rttCx_pattern == 'Cx_newLong' and rttPark:
+        MR5_offset = rttPark_start + rttPark_size + 3
+        mr['MR5'] = DDR5_MR5_decode(get_bits(mrs_data, MR5_offset, 0, 7))
+    
     mr["SelectAllPDA"] = get_bits(mrs_data, mrs_size - 1, 0, 7)
 
 def get_mem_ctrl(ctrl_num):

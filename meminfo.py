@@ -735,12 +735,15 @@ class WindowMemory():
             except AttributeError:
                 return False
             if mrs_name not in mrs:
+                vv0.value = ''
+                vv1.value = ''
                 return False
             if isinstance(mrs[mrs_name], list):
                 vv0.value = mrs[mrs_name][0]
                 vv1.value = mrs[mrs_name][1]
             else:
                 vv0.value = mrs[mrs_name]
+                vv1.value = ''
             return True
         
         if 'MRS' in ci and ci['MRS']:
