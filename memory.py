@@ -284,6 +284,23 @@ def get_undoc_params(tm, info, controller, channel):
     else:
         raise RuntimeError()
 
+def OdtDecode(value):
+    if value == 0:
+        return 0   # Disabled, Reset default
+    Ohm_list = [  0,  240,     120,     80,      60,      48,      40,      34     ]
+    RZQ_list = [ '', 'RZQ/1', 'RZQ/2', 'RZQ/3', 'RZQ/4', 'RZQ/5', 'RZQ/6', 'RZQ/7' ]
+    return Ohm_list[value] if value < len(Ohm_list) else None
+
+def CccOdtDecode(value):
+    if value == 0:
+        return 0   # Disabled, Reset default
+    Ohm_list = [  0,  480,     240,     120,     80,      60,      48,      40,    ]
+    RZQ_list = [ '', 'RZQ*2', 'RZQ/1', 'RZQ/2', 'RZQ/3', 'RZQ/4', 'RZQ/5', 'RZQ/6' ]
+    return Ohm_list[value] if value < len(Ohm_list) else None
+
+def VrefPercentDecode(index):  # ref: ICÈ_TÈA_BIOS enum DDR5_MR10_VREF
+    return 97.5 - index / 2
+
 def DDR5_ImpedanceDecode(value):
     val_list = [ 34, 40, 48 ]
     return val_list[value] if value < len(val_list) else None
@@ -321,22 +338,18 @@ def DDR5_MR13_decode(value):
         return None
     return mr13_table[value]
 
-def OdtDecode(value):
-    if value == 0:
-        return 0   # Disabled, Reset default
-    Ohm_list = [  0,  240,     120,     80,      60,      48,      40,      34     ]
-    RZQ_list = [ '', 'RZQ/1', 'RZQ/2', 'RZQ/3', 'RZQ/4', 'RZQ/5', 'RZQ/6', 'RZQ/7' ]
-    return Ohm_list[value] if value < len(Ohm_list) else None
+def DDR5_MR32_decode(value):
+    res = { }
+    res['CK'] = CccOdtDecode(get_bits(value, 0, 0, 2))
+    res['CS'] = CccOdtDecode(get_bits(value, 0, 3, 5))
+    res['CA_Strap'] = get_bits(value, 0, 6)
+    return res
 
-def CccOdtDecode(value):
-    if value == 0:
-        return 0   # Disabled, Reset default
-    Ohm_list = [  0,  480,     240,     120,     80,      60,      48,      40,    ]
-    RZQ_list = [ '', 'RZQ*2', 'RZQ/1', 'RZQ/2', 'RZQ/3', 'RZQ/4', 'RZQ/5', 'RZQ/6' ]
-    return Ohm_list[value] if value < len(Ohm_list) else None
-
-def VrefPercentDecode(index):  # ref: ICÈ_TÈA_BIOS enum DDR5_MR10_VREF
-    return 97.5 - index / 2
+def DDR5_MR33_decode(value):
+    res = { }
+    res['CA'] = CccOdtDecode(get_bits(value, 0, 0, 2))
+    res['RttParkDqs'] = OdtDecode(get_bits(value, 0, 3, 5))
+    return res
 
 def get_mrs_storage(data, tm, info, controller, channel):
     # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # file "MrcMcRegisterStructAdlExxx.h" + "MrcDdr5Registers.h"
@@ -469,6 +482,10 @@ def get_mrs_storage(data, tm, info, controller, channel):
                 val = OdtDecode(value & DDR5_MPC_RTT_MASK)
             if vtype == 'Park' and (value & ~DDR5_MPC_RTT_MASK) == DDR5_MPC_SET_RTT_PARK:
                 val = OdtDecode(value & DDR5_MPC_RTT_MASK)
+            if vtype == 'MR32':
+                val = DDR5_MR32_decode(value)
+            if vtype == 'MR33':
+                val = DDR5_MR33_decode(value)
             if val is not None:
                 vcount += 1
                 if idx is not None:
@@ -490,24 +507,32 @@ def get_mrs_storage(data, tm, info, controller, channel):
     rttCx = None
     pattern_Cx_dict = {
         'Cx_new': [
-            'MR13=MR13',
-            'mpcSetCmdTiming=CmdTiming',
-            'CKa=RttCK_A',
-            'CSa=RttCS_A',
-            'CAa=RttCA_A',
-            'CKb=RttCK_B',
-            'CSb=RttCS_B',
-            'CAb=RttCA_B',
+            'MR13=MR13',                         # mpcMR13
+            'mpcSetCmdTiming=CmdTiming',         # mpcSetCmdTiming
+            'CKa=RttCK_A',                       # mpcMR32a0
+            'CSa=RttCS_A',                       # mpcMR32a1
+            'CAa=RttCA_A',                       # mpcMR33a0
+            'CKb=RttCK_B',                       # mpcMR32b0
+            'CSb=RttCS_B',                       # mpcMR32b1
+            'CAb=RttCA_B',                       # mpcMR33b0
+            '?',
+            '?',
+            'ParkDqs=RttParkDqs',                # mpcMR33
+            'Park=RttPARK',                      # mpcMR34
         ],
         'Cx_newLong': [
-            'MR13=MR13',
-            'mpcSetCmdTiming=CmdTiming',
-            'CKa=RttCK_A#0', 'CKa=RttCK_A#1',
-            'CSa=RttCS_A#0', 'CSa=RttCS_A#1',
-            'CAa=RttCA_A#0', 'CAa=RttCA_A#1',
-            'CKb=RttCK_B#0', 'CKb=RttCK_B#1',
-            'CSb=RttCS_B#0', 'CSb=RttCS_B#1',
-            'CAb=RttCA_B#0', 'CAb=RttCA_B#1',
+            'MR13=MR13',                         # mpcMR13
+            'mpcSetCmdTiming=CmdTiming',         # mpcSetCmdTiming
+            'CKa=RttCK_A#0', 'CKa=RttCK_A#1',    # mpcMR32a0
+            'CSa=RttCS_A#0', 'CSa=RttCS_A#1',    # mpcMR32a1
+            'CAa=RttCA_A#0', 'CAa=RttCA_A#1',    # mpcMR33a0
+            'CKb=RttCK_B#0', 'CKb=RttCK_B#1',    # mpcMR32b0
+            'CSb=RttCS_B#0', 'CSb=RttCS_B#1',    # mpcMR32b1
+            'CAb=RttCA_B#0', 'CAb=RttCA_B#1',    # mpcMR33b0
+            '?', '?',  #'MR32=MR32#0', 'MR32=MR32#1',         # MR32
+            '?', '?',  #'MR33=MR33#0', 'MR33=MR33#1',         # MR33
+            'ParkDqs=RttParkDqs#0', 'ParkDqs=RttParkDqs#1',   # mpcMR33
+            'Park=RttPARK#0', 'Park=RttPARK#1',               # mpcMR34
         ],
     }
     for pname, pattern in pattern_Cx_dict.items():
@@ -521,29 +546,8 @@ def get_mrs_storage(data, tm, info, controller, channel):
         for key, value in rttCx.items():
             mr[key] = value
 
-    rttPark_start = 0
-    rttPark_size = 0
-    rttPark = None
-    if rttCx_pattern == 'Cx_new':
-        rttPark_start = rttCx_start + rttCx_size + 2
-        pattern = [ 'ParkDqs=RttParkDqs', 'Park=RttPARK', ]
-        sz, res = rttCx_check_and_read(rttPark_start, pattern)
-        if sz == len(pattern):
-            rttPark = res
-            rttPark_size = len(pattern)
-    if rttCx_pattern == 'Cx_newLong':
-        rttPark_start = rttCx_start + rttCx_size + 2*2
-        pattern = [ 'ParkDqs=RttParkDqs#0', 'ParkDqs=RttParkDqs#1', 'Park=RttPARK#0', 'Park=RttPARK#1', ]
-        sz, res = rttCx_check_and_read(rttPark_start, pattern)
-        if sz == len(pattern):
-            rttPark = res
-            rttPark_size = len(pattern)
-    if rttPark:
-        for key, value in rttPark.items():
-            mr[key] = value
-    
-    if rttCx_pattern == 'Cx_newLong' and rttPark:
-        MR5_offset = rttPark_start + rttPark_size + 3
+    if rttCx_pattern == 'Cx_newLong' and rttCx:
+        MR5_offset = rttCx_start + rttCx_size + 3
         mr['MR5'] = DDR5_MR5_decode(get_bits(mrs_data, MR5_offset, 0, 7))
     
     mr["SelectAllPDA"] = get_bits(mrs_data, mrs_size - 1, 0, 7)
