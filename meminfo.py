@@ -91,7 +91,7 @@ class WindowMemory():
         self.dimm_count = 4
 
         # Main container
-        main_frame = ttk.Frame(self.root, padding=(10, 5))
+        main_frame = ttk.Frame(self.root, padding=(10, 3))
         main_frame.pack(fill=tk.BOTH, expand=True)
 
         cpu_frame = ttk.Frame(main_frame)
@@ -119,9 +119,9 @@ class WindowMemory():
         
         vv.dimm_radio = tk.StringVar()
         vv.dram_model_list = [ ]
-        vv.pmic_vendor_list = [ ]
+        vv.die_vendor_list = [ ]
         
-        def create_dimm(dnum, size, model, mc, ch, pmic, w = 0, anchor = 'center'):
+        def create_dimm(dnum, size, model, mc, ch, die, w = 0, anchor = 'center'):
             nonlocal vv, dimm_frame2
             slot = 'Slot ' + str(dnum)
             size = f'{size} GB' if size else ''
@@ -131,8 +131,8 @@ class WindowMemory():
             mc = str(mc) if size else ''
             ch_t = 'CH' if size else ''
             ch = str(ch) if size else ''
-            pmic_t = 'PMIC' if size else ''
-            pmic = str(pmic) if size else ''
+            die_t = 'DIE' if size else ''
+            die = str(die) if size else ''
             vstyle = 'fixV.TLabel' if size else 'Title.TLabel'
             vstyle2 = 'fixV2.TLabel' if size else 'Title.TLabel'
             vstyle3 = 'val.TLabel' if size else 'Title.TLabel'
@@ -144,8 +144,8 @@ class WindowMemory():
                 radio_btn.config(state = tk.DISABLED)
             dram_var = WinVar(model)
             vv.dram_model_list.append( dram_var )
-            pmic_var = WinVar(pmic)
-            vv.pmic_vendor_list.append( pmic_var )
+            die_var = WinVar(die)
+            vv.die_vendor_list.append( die_var )
             ttk.Label(frame, text=size, style=vstyle, width=6, anchor=anchor).pack(side=tk.LEFT)
             ttk.Label(frame, text=model_t, style='Title.TLabel', width=6, anchor='e').pack(side=tk.LEFT)
             ttk.Label(frame, textvariable=dram_var, style=vstyle2, width=38, anchor='center').pack(side=tk.LEFT)
@@ -153,8 +153,8 @@ class WindowMemory():
             ttk.Label(frame, text=mc, style=vstyle, width=2, anchor=anchor).pack(side=tk.LEFT)
             ttk.Label(frame, text=ch_t, style='Title.TLabel', width=3, anchor='e').pack(side=tk.LEFT)
             ttk.Label(frame, text=ch, style=vstyle, width=2, anchor=anchor).pack(side=tk.LEFT)
-            ttk.Label(frame, text=pmic_t, style='Title.TLabel', width=5, anchor='e').pack(side=tk.LEFT)
-            ttk.Label(frame, textvariable=pmic_var, style=vstyle2, width=15, anchor='center').pack(side=tk.LEFT)
+            ttk.Label(frame, text=die_t, style='Title.TLabel', width=3, anchor='e').pack(side=tk.LEFT)
+            ttk.Label(frame, textvariable=die_var, style=vstyle2, width=15, anchor='center').pack(side=tk.LEFT)
             
         self.dimm_map = { }
         dnum = 0
@@ -190,17 +190,26 @@ class WindowMemory():
             ch_name = ''
             size = self.dimm_map[dnum]['size']
             model = '????????'
-            pmic_name = '???????'
+            die_name = '???????'
             if size and (len(ch_tag_list) == 1 or (len(ch_tag_list) == 2 and ch_tag_list[0] == ch_tag_list[1] )):
                 ch_name = 'A' if ch_tag_list[0] == 'L' else 'B'
             if size and self.current_slot is None:
                 self.current_slot = dnum
                 self.current_mc = mc_num
                 self.current_ch = ch_num_list[0]
-            create_dimm(dnum, size, model, mc_num, ch_name, pmic_name)
+            create_dimm(dnum, size, model, mc_num, ch_name, die_name)
 
         if self.current_slot is not None:
             vv.dimm_radio.set(str(self.current_slot))
+        
+        dram_ext_frame = ttk.Frame(main_frame)
+        dram_ext_frame.pack(fill=tk.X, pady=1)
+
+        ttk.Label(dram_ext_frame, text=' ', style='Title.TLabel', width=2, anchor='e').pack(side=tk.LEFT, fill=tk.X, expand = True)
+        
+        vv.PMIC_name = WinVar('???????')
+        ttk.Label(dram_ext_frame, text='PMIC', style='Title.TLabel', width=5, anchor='e').pack(side=tk.LEFT)
+        ttk.Label(dram_ext_frame, textvariable=vv.PMIC_name, style='fixV2.TLabel', width=26, anchor='center').pack(side=tk.LEFT)
         
         freq_volt_frame = ttk.Frame(main_frame)
         freq_volt_frame.pack(fill=tk.X, pady=0)
@@ -548,7 +557,7 @@ class WindowMemory():
         create_odt_val(odt_cxB_frame, 'B', [ "CA", "CS", "CK" ], wn = 3 )
 
         btn_frame = ttk.Frame(main_frame)
-        btn_frame.pack(fill=tk.X, pady=6)
+        btn_frame.pack(fill=tk.X, pady=3)
 
         btn_dump = ttk.Button(btn_frame, text="Dump to file", command = self.button_click_dump)
         btn_dump.pack(side=tk.LEFT)
@@ -584,26 +593,38 @@ class WindowMemory():
         for elem in vv.dram_model_list:
             elem.set('')
         
-        for elem in vv.pmic_vendor_list:
+        for elem in vv.die_vendor_list:
             elem.set('')
         
+        cur_dimm = None
         slot_count = 0
         for elem in self.mem_info['memory']['DIMM']:
             slot = elem['slot']
+            if slot == slot_id:
+                cur_dimm = elem
             slot_count += 1
-            spd = elem['SPD']
+            spd = elem['SPD'] if 'SPD' in elem else None
             if spd:
                 vendor = spd['vendor']
                 if not vendor:
                     vendor = '0x%04X' % spd['vendorid']
                 ranks = '  (' + str(spd['ranks']) + 'R)'
                 vv.dram_model_list[slot].value = vendor + '  ' + spd['part_number'] + ranks
-            if 'PMIC' in elem and elem['PMIC']:
-                vendor = elem['PMIC']['vendor']
+            if spd and 'die_vendorid' in spd and spd['die_vendorid']:
+                vendor = spd['die_vendor'] if 'die_vendor' in spd else None
                 if not vendor:
-                    vendor = '0x%04X' % elem['PMIC']['vid']
-                vv.pmic_vendor_list[slot].value = vendor
-                
+                    vendor = '0x%04X' % spd['die_vendorid']
+                if 'die_stepping' in spd:
+                    vendor += f' [0x{spd["die_vendorid"]:02X}]'
+                vv.die_vendor_list[slot].value = vendor
+        
+        vv.PMIC_name.value = ''
+        if cur_dimm and 'PMIC' in cur_dimm and cur_dimm['PMIC']:
+            vendor = cur_dimm['PMIC']['vendor']
+            if not vendor:
+                vendor = '0x%04X' % cur_dimm['PMIC']['vid']
+            vv.PMIC_name.value = vendor
+        
         vv.BCLK.value = mem['BCLK_FREQ']
         vv.MCLK_RATIO.value = mem['SA']['QCLK_RATIO']
         vv.MCLK_FREQ.value  = mem['SA']['QCLK']
