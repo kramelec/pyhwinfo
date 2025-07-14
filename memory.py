@@ -65,6 +65,7 @@ def get_mchbar_info(info, controller, channel):
         tm["tRDPRE"] = get_bits(data, IMC_CR_TC_PRE, 13, 19)
         tm["tRTP"] = tm["tRDPRE"]
         tm["tPPD"] = get_bits(data, IMC_CR_TC_PRE, 20, 23)
+        tm["tRCDW"] = get_bits(data, IMC_CR_TC_PRE, 24, 31)
         tm["tWRPRE"] = get_bits(data, IMC_CR_TC_PRE, 32, 41)
         tm["tRAS"] = get_bits(data, IMC_CR_TC_PRE, 42, 50)
         tm["tRCD"] = get_bits(data, IMC_CR_TC_PRE, 51, 58)

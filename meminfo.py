@@ -393,7 +393,7 @@ class WindowMemory():
             ( "__combobox", "" ),
             ( "tCL",    '??' ),
             ( "tRCD",   '??' ),
-            ( "tRCDwr", ''   ),
+            ( "tRCDW",  ''   ),
             ( "tRP",    '??' ),
             ( "tRAS",   '??' ),
             ( "tRC",    '??' ),
@@ -657,7 +657,7 @@ class WindowMemory():
         ci = chan['info']
         vv.tCL.value = ci['tCL']
         vv.tRCD.value = ci['tRCD']
-        vv.tRCDwr.value = ''
+        vv.tRCDW.value = ci['tRCDW'] if 'tRCDW' in ci else ''
         vv.tRP.value = ci['tRP']
         vv.tRAS.value = ci['tRAS']
         vv.tRC.value = ci['tRAS'] + ci['tRP']
