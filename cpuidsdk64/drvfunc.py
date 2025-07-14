@@ -330,27 +330,42 @@ def phymem_read(addr, size, out_decimal = False):
     return None
 
 # ioctl: 9C402544
-def phymem_cfg_read(bus, dev, fun, offset, size):
-    raise RuntimeError('Not implemented')
-
-# ioctl: 9C40254C
-def phymem_write_u4(bus, dev, fun, offset, value: int):
+def phymem_pc_read64(bus, dev, fun, offset, addr_mask, addr_offset):
     _drv = _get_drv()
     dev_fun = (SETDIM(dev, 5) << 3) | SETDIM(fun, 3)
-    inbuf = struct.pack('<BBBBII', 0, dev_fun, bus, 0, offset, value)
+    inbuf = struct.pack('<BBBBIII', 0, dev_fun, bus, 0, offset, addr_mask, addr_offset)
     # BusDataType = PCIConfiguration = 4
     # BusNumber = bus
     # SlotNumber = (SETDIM(fun, 3) << 5) | SETDIM(dev, 5)
-    # Buffer = 
-    # Offset = 0xF0
+    # Offset = offset
     # Length = 8
     # mem_addr = HalGetBusDataByOffset(BUS_DATA_TYPE BusDataType, ULONG BusNumber, ULONG SlotNumber, PVOID Buffer, ULONG Offset, ULONG Length);
-    # phy_addr = mem_addr & 0xFFFFC000
-    # addr = phy_addr + offset
-    # *addr = value 
-    buf = DeviceIoControl(_drv, IOCTL(CPUZ_PHYMEM_WRITE_U4), inbuf, 4, None)
+    # mem_addr = mem_addr & addr_mask
+    # mem_addr += addr_offset
+    # value = *mem_addr
+    buf = DeviceIoControl(_drv, IOCTL(CPUZ_PHYMEM_PC_READ64), inbuf, 8, None)
+    (value, ) = struct.unpack('<Q', buf)
+    if value == 0xBBBBBBBBAAAAAAAA or value == 0xDDDDDDDDCCCCCCCC:
+        return None
+    return value
+
+# ioctl: 9C402560
+def phymem_pc_write32(bus, dev, fun, offset, addr_mask, addr_offset, value: int):
+    _drv = _get_drv()
+    dev_fun = (SETDIM(dev, 5) << 3) | SETDIM(fun, 3)
+    inbuf = struct.pack('<BBBBIIII', 0, dev_fun, bus, 0, offset, addr_mask, addr_offset, value)
+    # BusDataType = PCIConfiguration = 4
+    # BusNumber = bus
+    # SlotNumber = (SETDIM(fun, 3) << 5) | SETDIM(dev, 5)
+    # Offset = offset
+    # Length = 8
+    # mem_addr = HalGetBusDataByOffset(BUS_DATA_TYPE BusDataType, ULONG BusNumber, ULONG SlotNumber, PVOID Buffer, ULONG Offset, ULONG Length);
+    # mem_addr = mem_addr & addr_mask
+    # mem_addr += addr_offset
+    # *mem_addr = value 
+    buf = DeviceIoControl(_drv, IOCTL(CPUZ_PHYMEM_PC_WRITE32), inbuf, 4, None)
     (rc, ) = struct.unpack('<I', buf)
-    if rc == 0xAAAAAAAAA or rc == 0xCCCCCCCC:
+    if rc == 0xAAAAAAAA or rc == 0xCCCCCCCC:
         return False
     return True
 

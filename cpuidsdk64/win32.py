@@ -172,7 +172,7 @@ def get_bits(buf, offset, firts_bit, last_bit = None, bits = None):
     if last_bit is None and isinstance(bits, int):
         last_bit = firts_bit + bits - 1
     if last_bit < firts_bit:
-        raise ValueError()
+        firts_bit, last_bit = last_bit, firts_bit # swap values
     size = ((last_bit + 1) // 8) + 1
     if isinstance(buf, int) and size <= 8:
         buf = int_encode(buf, 8)
