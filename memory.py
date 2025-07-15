@@ -222,7 +222,7 @@ def get_mchbar_info(info, controller, channel):
             tm["tZQOPER"] = get_bits(data, 0x440, 16, 23)   # UNDOC
             tm["tMOD"]    = get_bits(data, 0x440, 24, 31)   # UNDOC
 
-        if proc_model_id in ARL_FAM:   # Self-Refresh Exit Timing Parameters 
+        if proc_model_id in ADL_FAM:   # Self-Refresh Exit Timing Parameters 
             tm["tXSR"]    = get_bits(data, 0x4C0, 0, 12)
             tm["tSR"]     = get_bits(data, 0x4C0, 52, 57)
         if proc_model_id in ARL_FAM:   # Self-Refresh Exit Timing Parameters 
