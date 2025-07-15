@@ -956,7 +956,29 @@ def get_mem_info():
         mc.append( mem )
     return gdict
 
+def dump_mchbar(offset, size):
+    global MCHBAR_BASE 
+    if not MCHBAR_BASE:
+        return False
+    return phymem_read(MCHBAR_BASE + offset, size)
+    
+def dump_mchbar_to_file(offset, size, filename = None):
+    data = dump_mchbar(offset, size)
+    if not data:
+        return False
+    fn = filename if filename else f'MCHBAR_{offset:04X}.dat' 
+    with open(fn, 'wb') as file:
+        file.write(data)
+    if not filename:
+        print(f'File "{fn}" created!')
+    return True
+
 if __name__ == "__main__":
+    mchbar = False
+    if len(sys.argv) > 1:
+        if sys.argv[1].lower() == 'mchbar':
+            mchbar = True
+    
     SdkInit(None, 0)
     out = get_mem_info()
     #print(json.dumps(memory, indent = 4))
@@ -964,3 +986,5 @@ if __name__ == "__main__":
     with open(fn, 'w') as file:
         json.dump(out, file, indent = 4)
     print(f'File "{fn}" created!')
+    if mchbar:
+        dump_mchbar_to_file(0, 0x10000 * 3)
