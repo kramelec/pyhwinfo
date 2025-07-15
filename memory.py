@@ -728,20 +728,20 @@ def get_mem_info():
     MCHBAR_BASE = MCHBAR_BASE - 1
     print(f'MCHBAR_BASE = 0x{MCHBAR_BASE:X}')
 
-    DMIBAR_BASE = pci_cfg_read(0, 0, 0, 0x68, '8')
-    if (DMIBAR_BASE & 1) != 1:
-        raise RuntimeError(f'ERROR: Readed incorrect DMIBAR_BASE = 0x{DMIBAR_BASE:X}')
-    if DMIBAR_BASE < 0xFE000000:
-        raise RuntimeError(f'ERROR: Readed incorrect DMIBAR_BASE = 0x{DMIBAR_BASE:X}')
-    DMIBAR_BASE = DMIBAR_BASE - 1
-    print(f'DMIBAR_BASE = 0x{DMIBAR_BASE:X}')
-
-    DMI_DeviceId = phymem_read(DMIBAR_BASE, 4)
-    DMI_VID = get_bits(DMI_DeviceId, 0, 0, 15)
-    DMI_DID = get_bits(DMI_DeviceId, 0, 16, 31)
-    print(f'DMI_VID = 0x{DMI_VID:X}  DMI_DID = 0x{DMI_DID:X}')
-    if DMI_VID != PCI_VENDOR_ID_INTEL:
-        raise RuntimeError(f'ERROR: Currently support only Intel processors')
+    dmibar_addr = pci_cfg_read(0, 0, 0, 0x68, '8')
+    DMIBAR_EN = get_bits(dmibar_addr, 0, 0, 1)
+    if not DMIBAR_EN:
+        print(f'DMIBAR_EN = False (0x{dmibar_addr:08X})')
+    else:
+        DMIBAR_addr = get_bits(dmibar_addr, 0, 12, 41)
+        DMIBAR_BASE = DMIBAR_addr << 12
+        print(f'DMIBAR_BASE = 0x{DMIBAR_BASE:X}')
+        DMI_DeviceId = phymem_read(DMIBAR_BASE, 4)
+        DMI_VID = get_bits(DMI_DeviceId, 0, 0, 15)
+        DMI_DID = get_bits(DMI_DeviceId, 0, 16, 31)
+        print(f'DMI_VID = 0x{DMI_VID:X}  DMI_DID = 0x{DMI_DID:X}')
+        if DMI_VID != PCI_VENDOR_ID_INTEL:
+            raise RuntimeError(f'ERROR: Currently support only Intel processors')
 
     #mchbar_mmio = MCHBAR_BASE + 0x6000
 
