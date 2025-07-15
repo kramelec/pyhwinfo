@@ -647,24 +647,27 @@ class WindowMemory():
         vv.mem_freq.value = int(float(vv.MCLK_FREQ.value) * 2)
         if mem['BCLK_FREQ'] > 98 and mem['BCLK_FREQ'] < 105:
             vv.mem_freq.value = mem['SA']['QCLK_RATIO'] * 100 * 2
-        if pmic:
+
+        vv.sens_Temp.value = ''
+        vv.sens_VDD.value = ''
+        vv.sens_VDDQ.value = ''
+        vv.sens_VPP.value = ''
+        vv.sens_VIN.value = ''
+        vv.sens_1_8V.value = ''
+        vv.sens_1_0V.value = ''
+        if pmic and 'SWA' in pmic:
             vv.sens_VDD.value = pmic['SWA']
             vv.sens_VDDQ.value = pmic['SWC']
             vv.sens_VPP.value = pmic['SWD']
+        if pmic and 'VIN' in pmic:
             vv.sens_VIN.value = pmic['VIN']
+        if pmic and '1.8V' in pmic:
             vv.sens_1_8V.value = pmic['1.8V']
+        if pmic and '1.0V' in pmic:
             vv.sens_1_0V.value = pmic['1.0V']
-        else:
-            vv.sens_VDD.value = ''
-            vv.sens_VDDQ.value = ''
-            vv.sens_VPP.value = ''
-            vv.sens_VIN.value = ''
-            vv.sens_1_8V.value = ''
-            vv.sens_1_0V.value = ''
         if dimm and 'temp' in dimm:
             vv.sens_Temp.value = dimm['temp']
-        else:
-            vv.sens_Temp.value = ''
+        
         vv.DDR_OVERCLOCK.value = 'ON' if cap['DDR_OVERCLOCK'] else 'off'
         vv.TIMING_RUNTIME_OC.value = 'ON' if mem['MC_TIMING_RUNTIME_OC_ENABLED'] else 'off'
         vv.BCLK_OC.value = 'ON' if cap['BCLKOCRANGE'] == 3 else 'off'
