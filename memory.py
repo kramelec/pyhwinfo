@@ -500,15 +500,21 @@ def get_mrs_storage(data, tm, info, controller, channel):
             mr["OdtlOnRdNtOffset"]  = get_bits(mrs_data, MR37 + 2, 0, 2)
             mr["OdtlOffRdNtOffset"] = get_bits(mrs_data, MR37 + 2, 3, 5)
         MR34 = None
-        for pos in range(MR37 - 1, MR37 - 7, -1):
-            flag = get_bits(mrs_data, pos, 6, 7)  # check for 0xC1, 0xC3 ....
-            if flag:
-                MR34 = pos + 1
-                break
+        for pos in range(MR37 - 1, MR37 - 8, -1):
+            flag = None
+            if cpu_id in i12_FAM:
+                flag = get_bits(mrs_data, pos, 6, 7)  # check for 0xC1, 0xC3 ....
+                if flag:
+                    MR34 = pos + 1
+                    break
+            elif cpu_id in i15_FAM:
+                flag = get_bits(mrs_data, pos, 0, 7) == 0xD5  # ???????
+                if flag:
+                    MR34 = pos + 4
+                    break
     mr['MR34_offset'] = MR34
     if MR34:
         if cpu_id in i15_FAM:
-            MR34 += 2     # FIXME
             mr["RttWr"]       = OdtDecode(get_bits(mrs_data, MR34, 3, 5))
             mr["RttPark"]     = OdtDecode(get_bits(mrs_data, MR34, 0, 2))
             MR35 = MR34 + 1
