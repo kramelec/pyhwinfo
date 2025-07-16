@@ -630,7 +630,7 @@ class WindowMemory():
         if mem['SA']['QCLK_RATIO']:
             QCLK_RATIO = mem['SA']['QCLK_RATIO']
             vv.MCLK_RATIO.value = QCLK_RATIO
-            vv.MCLK_FREQ.value  = mem['SA']['QCLK']
+            vv.MCLK_FREQ.value  = mem['SA']['QCLK_FREQ']
         elif 'QCLK_RATIO' in mem and mem['QCLK_RATIO']:
             MCLK_FREQ = mem['QCLK_FREQ']
             QCLK_RATIO = int(round((MCLK_FREQ + 36) / mem['BCLK_FREQ']))
