@@ -673,7 +673,12 @@ class WindowMemory():
         vv.BCLK_OC.value = 'ON' if cap['BCLKOCRANGE'] == 3 else 'off'
         vv.OC_ENABLED.value = 'ON' if cap['OC_ENABLED'] else 'off'
         vv.SA_VOLTAGE.value = mem['SA']['SA_VOLTAGE']
-        vv.POWER_LIMIT.value = 'ON' if mem['POWER']['limits_LOCKED'] != 0 else 'off'
+        vv.POWER_LIMIT.value = ''
+        if 'LIMIT2_ENABLE' in mem['POWER']:
+            if mem['POWER']['LIMIT2_ENABLE'] == 0 and mem['POWER']['LIMIT1_ENABLE'] == 0:
+                vv.POWER_LIMIT.value = 'off'
+            else:
+                vv.POWER_LIMIT.value = 'ON'
         vv.VDDQ_TX.value = mem['REQ_VDDQ_TX_VOLTAGE']
         vv.VDDQ_TX_ICCMAX.value = mem['REQ_VDDQ_TX_ICCMAX']
         

@@ -860,12 +860,12 @@ def get_mem_info():
     pw = mi['POWER'] = { }
     if proc_model_id in i12_FAM:
         data = phymem_read(MCHBAR_BASE + 0x58E0, 8)   # DDR Power Limit
-        pw['LIMIT1_POWER'] = get_bits(data, 0, 0, 14) / 100 # Power Limit 1 (PL1) for DDR domain in Watts. Format is U11.3: Resolution 0.125W, Range 0-2047.875W
-        pw['LIMIT1_ENABLE'] = get_bits(data, 0, 15, 15)  # Power Limit 1 (PL1) enable bit for DDR domain
+        pw['LIMIT1_POWER'] = get_bits(data, 0, 0, 14) * 0.125   # Power Limit 1 (PL1) for DDR domain in Watts. Format is U11.3: Resolution 0.125W, Range 0-2047.875W
+        pw['LIMIT1_ENABLE'] = get_bits(data, 0, 15, 15)         # Power Limit 1 (PL1) enable bit for DDR domain
         pw['LIMIT1_TIME_WINDOW_Y'] = get_bits(data, 0, 17, 21)  # Power Limit 1 (PL1) time window Y value, for DDR domain. Actual time window for RAPL is: (1/1024 seconds) * (1+(X/4)) * (2Y)
         pw['LIMIT1_TIME_WINDOW_X'] = get_bits(data, 0, 22, 23)  # Power Limit 1 (PL1) time window X value, for DDR domain. Actual time window for RAPL is: (1/1024 seconds) * (1+(X/4)) * (2Y) 
-        pw['LIMIT2_POWER'] = get_bits(data, 0, 32, 46) / 100 # Power Limit 2 (PL2) for DDR domain in Watts. Format is U11.3: Resolution 0.125W, Range 0-2047.875W.
-        pw['LIMIT2_ENABLE'] = get_bits(data, 0, 47, 47)  # Power Limit 2 (PL2) enable bit for DDR domain.
+        pw['LIMIT2_POWER'] = get_bits(data, 0, 32, 46) * 0.125  # Power Limit 2 (PL2) for DDR domain in Watts. Format is U11.3: Resolution 0.125W, Range 0-2047.875W.
+        pw['LIMIT2_ENABLE'] = get_bits(data, 0, 47, 47)         # Power Limit 2 (PL2) enable bit for DDR domain.
         pw['limits_LOCKED'] = get_bits(data, 0, 63, 63)  # When set, this entire register becomes read-only. This bit will typically be set by BIOS during boot.
     data = phymem_read(MCHBAR_BASE + 0x58F0, 4)   # Package RAPL Performance Status
     pw['RAPL_COUNTS'] = get_bits(data, 0, 0, 31)
