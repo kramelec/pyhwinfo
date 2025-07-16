@@ -55,6 +55,18 @@ TREFIMIN_DDR4   = 7800000   # Average periodic refresh interval, in picoseconds 
 TREFIMIN_DDR5   = 1950000   # Average periodic refresh interval, in picoseconds (1.95 us for DDR5)
 TREFIMULTIPLIER = 1000      # tREFI value defined in XMP 1.3 spec is actually in thousands of MTB units. 
 
+g_fake_proc_model_id = None
+g_fake_mchbar = None
+
+def phymem_read(addr, size, out_decimal = False):
+    import cpuidsdk64
+    global g_fake_mchbar
+    if g_fake_mchbar and MCHBAR_BASE and addr >= MCHBAR_BASE and addr + size < MCHBAR_BASE + len(g_fake_mchbar):
+        pos = addr - MCHBAR_BASE
+        data = g_fake_mchbar[pos:pos+size]
+        return int.from_bytes(data, 'little') if out_decimal else data
+    return cpuidsdk64.phymem_read(addr, size, out_decimal)
+
 def get_mchbar_info(info, controller, channel):
     global gdict, proc_model_id, MCHBAR_BASE 
     MCHBAR_addr = MCHBAR_BASE + (0x10000 * controller)
@@ -289,7 +301,11 @@ def get_mchbar_info(info, controller, channel):
 def get_undoc_params(tm, info, controller, channel):
     global gdict
     mem = gdict['memory']
-    mem_speed = mem['SA']['QCLK'] * 2   # MT/s
+    mem_speed = 0
+    if mem['SA']['QCLK_RATIO']:
+        mem_speed = mem['SA']['QCLK_FREQ'] * 2   # MT/s
+    else:
+        mem_speed = mem['QCLK_FREQ'] * 2   # MT/s
     mem["Speed"] = round(mem_speed, 2)
     mem["tCKmin"] = None
     # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # file "MrcInterface.h"
@@ -434,6 +450,8 @@ def DDR5_MR33_decode(value):
     return res
 
 def get_mrs_storage(data, tm, info, controller, channel):
+    global gdict
+    cpu_id = gdict['cpu']['model_id']
     # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # file "MrcMcRegisterStructAdlExxx.h" + "MrcDdr5Registers.h"
     IMC_MRS_FSM_STORAGE = 0x200
     MAX_MR_GEN_FSM          = 108  # Maximum number of MRS FSM CONTROL MR Addresses that can be sent.
@@ -462,11 +480,16 @@ def get_mrs_storage(data, tm, info, controller, channel):
         return  # unsupported format
 
     MR34 = None
+    MR37 = -1
     mr['MR37_offset'] = None
-    mr37v = b'\x1B'  # OdtlOffWrOffsetPlus2 << 3 + OdtlOnWrOffsetMinus2 = 3 << 3 + 3
-    mr38v = b'\x1B'  # OdtlOnWrOffsetMinus2 << 3 + OdtlOffWrOffsetPlus2 = 3 << 3 + 3
-    mr39v = b'\x1B'  # OdtlOnRdOffsetMinus2 << 3 + OdtlOffRdOffsetPlus2 = 3 << 3 + 3
-    MR37 = mrs_data.rfind(mr37v + mr38v + mr39v)
+    if cpu_id in i12_FAM:
+        mr37v = b'\x1B'  # OdtlOffWrOffsetPlus2 << 3 + OdtlOnWrOffsetMinus2 = 3 << 3 + 3
+        mr38v = b'\x1B'  # OdtlOnWrOffsetMinus2 << 3 + OdtlOffWrOffsetPlus2 = 3 << 3 + 3
+        mr39v = b'\x1B'  # OdtlOnRdOffsetMinus2 << 3 + OdtlOffRdOffsetPlus2 = 3 << 3 + 3
+        MR37 = mrs_data.rfind(mr37v + mr38v + mr39v)
+    elif cpu_id in i15_FAM:
+        MR37 = mrs_data.rfind(b'\x09\x09\x12')  # ???????
+        
     if MR37 >= 0:
         mr['MR37_offset'] = MR37
         if False:
@@ -484,7 +507,16 @@ def get_mrs_storage(data, tm, info, controller, channel):
                 break
     mr['MR34_offset'] = MR34
     if MR34:
-        if MR37 - MR34 == 5:
+        if cpu_id in i15_FAM:
+            MR34 += 2     # FIXME
+            mr["RttWr"]       = OdtDecode(get_bits(mrs_data, MR34, 3, 5))
+            mr["RttPark"]     = OdtDecode(get_bits(mrs_data, MR34, 0, 2))
+            MR35 = MR34 + 1
+            mr["RttNomWr"]    = OdtDecode(get_bits(mrs_data, MR35, 0, 2))
+            mr["RttNomRd"]    = OdtDecode(get_bits(mrs_data, MR35, 3, 5))
+            MR36 = MR34 + 2
+            mr["RttLoopback"] = OdtDecode(get_bits(mrs_data, MR36, 0, 2))
+        elif MR37 - MR34 == 5:
             MR34a = MR34
             MR34b = MR34 + 1
             mr["RttWr"]     = [ OdtDecode(get_bits(mrs_data, MR34a, 3, 5)), OdtDecode(get_bits(mrs_data, MR34b, 3, 5)) ]
@@ -616,6 +648,20 @@ def get_mrs_storage(data, tm, info, controller, channel):
             'ParkDqs=RttParkDqs#0', 'ParkDqs=RttParkDqs#1',   # mpcMR33
             'Park=RttPARK#0', 'Park=RttPARK#1',               # mpcMR34
         ],
+        'i15': [
+            'MR13=MR13#0', 'MR13=MR13#1',        # mpcMR13
+            'mpcSetCmdTiming=CmdTiming',         # mpcSetCmdTiming
+            'CKa=RttCK_A',                       # mpcMR32a0
+            'CSa=RttCS_A',                       # mpcMR32a1
+            'CAa=RttCA_A',                       # mpcMR33a0
+            'CKb=RttCK_B',                       # mpcMR32b0
+            'CSb=RttCS_B',                       # mpcMR32b1
+            'CAb=RttCA_B',                       # mpcMR33b0
+            '?',
+            '?',
+            'ParkDqs=RttParkDqs',                # mpcMR33
+            'Park=RttPARK',                      # mpcMR34
+        ],
     }
     for pname, pattern in pattern_Cx_dict.items():
         sz, res = rttCx_check_and_read(rttCx_start, pattern)
@@ -725,7 +771,7 @@ def get_mem_info():
     MCHBAR_BASE = pci_cfg_read(0, 0, 0, 0x48, '8')
     if (MCHBAR_BASE & 1) != 1:
         raise RuntimeError(f'ERROR: Readed incorrect MCHBAR_BASE = 0x{MCHBAR_BASE:X}')
-    if MCHBAR_BASE < 0xFE000000:
+    if MCHBAR_BASE < 0xFE000000 or MCHBAR_BASE >= 0xFFFFFFFF - 0x10000 * 3:
         raise RuntimeError(f'ERROR: Readed incorrect MCHBAR_BASE = 0x{MCHBAR_BASE:X}')
     MCHBAR_BASE = MCHBAR_BASE - 1
     print(f'MCHBAR_BASE = 0x{MCHBAR_BASE:X}')
@@ -845,6 +891,10 @@ def get_mem_info():
     cap['MAX_DATA_FREQ_DDR5'] = cap['MAX_DATA_RATE_DDR5'] * 266
     cap['VDDQ_VOLTAGE_MAX'] = round(VDDQ_VOLTAGE_MAX * 5 / 1000, 3)  # VDDQ_TX Maximum VID value (granularity UNDOC !!!)
 
+    if g_fake_proc_model_id:
+        proc_model_id = g_fake_proc_model_id
+        cpu['model_id'] = proc_model_id
+
     gdict['memory'] = { }
     mi = gdict['memory']
 
@@ -854,6 +904,7 @@ def get_mem_info():
     BCLK_FREQ = get_bits(data, 0, 0, 31) / 1000.0  # Reported BCLK Frequency in KHz
     mi['BCLK_FREQ'] = round(BCLK_FREQ, 3)
     if proc_model_id in i15_FAM:
+        mi['SOCBCLK_FREQ'] = mi['BCLK_FREQ']
         CPUBCLK_FREQ = get_bits(data, 0, 32, 63) / 1000.0  # Reported PCIE BCLK Frequency in Khz
         mi['CPUBCLK_FREQ'] = round(CPUBCLK_FREQ, 3)
 
@@ -898,7 +949,7 @@ def get_mem_info():
     QCLK_REF_FREQ = 100.0 if sa['QCLK_REFERENCE'] else 133.34  # MHz
     sa['QCLK_REF_FREQ'] = QCLK_REF_FREQ
     sa['QCLK_RATIO'] = get_bits(data, 0, 2, 9)  # Reference clock is determined by the QCLK_REFERENCE field.
-    sa['QCLK'] = round(sa['QCLK_RATIO'] * mi['BCLK_FREQ'], 3)
+    sa['QCLK_FREQ'] = round(sa['QCLK_RATIO'] * mi['BCLK_FREQ'], 3)
     #if sa['QCLK_REFERENCE'] == 0:
     #    sa['QCLK'] = round(sa['QCLK'] * 1.33, 3)
     sa['OPI_LINK_SPEED'] = get_bits(data, 0, 11, 11)  # 0: 2Gb/s    1: 4Gb/s
@@ -935,6 +986,24 @@ def get_mem_info():
         bios['GEAR'] = 1 << get_bits(data, 0, 12, 13)
         bios['REQ_VDDQ_TX_VOLTAGE'] = round(get_bits(data, 0, 17, 26) * 5 / 1000, 3) # Voltage of the VDDQ TX rail at this clock frequency and gear configuration. Described in 5mV resolution
         bios['REQ_VDDQ_TX_ICCMAX'] = round(get_bits(data, 0, 27, 30) * 0.25, 3)  # Described in 0.25A resolution. IccMax: 32 * 0.25 = 8A
+
+    if proc_model_id in i15_FAM:
+        bios = mi['BIOS_REQUEST'] = { }
+        data = phymem_read(MCHBAR_BASE + 0x13D08, 4)   # MemSS PMA BIOS request register
+        bios['QCLK_REF_FREQ'] = 33.33 # MHz
+        bios['QCLK_RATIO'] = get_bits(data, 0, 0, 7)
+        bios['QCLK_FREQ'] = round(bios['QCLK_RATIO'] * bios['QCLK_REF_FREQ'], 2)
+        bios['GEAR'] = 2 if get_bits(data, 0, 8) == 0 else 4
+        bios['MAX_BW_MBPS'] = get_bits(data, 0, 9, 28)
+        bios['QCLK_WP_IDX'] = get_bits(data, 0, 29, 30)
+        bios['RUN_BUSY'] = get_bits(data, 0, 31)
+
+        bios = mi
+        data = phymem_read(MCHBAR_BASE + 0x13D10, 4)   # MemSS PMA BIOS data register
+        bios['QCLK_REF_FREQ'] = 33.33 # MHz
+        bios['QCLK_RATIO'] = get_bits(data, 0, 0, 7)
+        bios['QCLK_FREQ'] = round(bios['QCLK_RATIO'] * bios['QCLK_REF_FREQ'], 2)
+        bios['GEAR'] = 2 if get_bits(data, 0, 8) == 0 else 4
 
     if proc_model_id in i12_FAM:
         data = phymem_read(MCHBAR_BASE + 0x5F00, 4)   # System Agent Power Management Control
@@ -981,17 +1050,29 @@ def dump_mchbar_to_file(offset, size, filename = None):
     return True
 
 if __name__ == "__main__":
-    mchbar = False
+    dump_raw_mchbar = False
     if len(sys.argv) > 1:
         if sys.argv[1].lower() == 'mchbar':
-            mchbar = True
+            dump_raw_mchbar = True
+        if sys.argv[1].lower() == 'test':
+            fn = sys.argv[2]
+            with open(fn, 'rb') as file:
+                g_fake_mchbar = file.read()
+            g_fake_proc_model_id = int(sys.argv[3])
     
     SdkInit(None, 0)
     out = get_mem_info()
-    #print(json.dumps(memory, indent = 4))
-    fn = 'IMC_mini.json'
-    with open(fn, 'w') as file:
+    out_fn = 'IMC_mini.json'
+
+    if g_fake_mchbar and os.path.exists('DIMM_fake.json'):
+        with open('DIMM_fake.json', 'r', encoding='utf-8') as file:
+            dimm = json.load(file)
+        out['memory']['DIMM'] = dimm['DIMM']
+        out_fn = 'IMC.json'
+    
+    with open(out_fn, 'w') as file:
         json.dump(out, file, indent = 4)
-    print(f'File "{fn}" created!')
-    if mchbar:
+        print(f'File "{out_fn}" created!')
+
+    if dump_raw_mchbar:
         dump_mchbar_to_file(0, 0x10000 * 3)

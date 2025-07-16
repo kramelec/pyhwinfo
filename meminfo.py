@@ -625,9 +625,21 @@ class WindowMemory():
                 vendor = '0x%04X' % cur_dimm['PMIC']['vid']
             vv.PMIC_name.value = vendor
         
+        QCLK_RATIO = 0
         vv.BCLK.value = mem['BCLK_FREQ']
-        vv.MCLK_RATIO.value = mem['SA']['QCLK_RATIO']
-        vv.MCLK_FREQ.value  = mem['SA']['QCLK']
+        if mem['SA']['QCLK_RATIO']:
+            QCLK_RATIO = mem['SA']['QCLK_RATIO']
+            vv.MCLK_RATIO.value = QCLK_RATIO
+            vv.MCLK_FREQ.value  = mem['SA']['QCLK']
+        elif 'QCLK_RATIO' in mem and mem['QCLK_RATIO']:
+            MCLK_FREQ = mem['QCLK_FREQ']
+            QCLK_RATIO = int(round((MCLK_FREQ + 36) / mem['BCLK_FREQ']))
+            vv.MCLK_RATIO.value = QCLK_RATIO
+            vv.MCLK_FREQ.value  = MCLK_FREQ
+        else:
+            vv.MCLK_RATIO.value = 0
+            vv.MCLK_FREQ.value  = 0
+        
         vv.UCLK_RATIO.value = mem['SA']['UCLK_RATIO']
         vv.UCLK_FREQ.value  = mem['SA']['UCLK']
         if mem['mc'][0]['DDR_ver'] == 5:
@@ -643,10 +655,15 @@ class WindowMemory():
         else:
             vv.chan_count.value = '?'
         
-        vv.gear_mode.value = mem['GEAR']
+        vv.gear_mode.value = ''
+        if 'GEAR' in mem:
+            vv.gear_mode.value = mem['GEAR']
+        elif 'GEAR' in mem['mc'][0]['channels'][0]['info']:
+            vv.gear_mode.value = mem['mc'][0]['channels'][0]['info']['GEAR']
+        
         vv.mem_freq.value = int(float(vv.MCLK_FREQ.value) * 2)
         if mem['BCLK_FREQ'] > 98 and mem['BCLK_FREQ'] < 105:
-            vv.mem_freq.value = mem['SA']['QCLK_RATIO'] * 100 * 2
+            vv.mem_freq.value = QCLK_RATIO * 100 * 2
 
         vv.sens_Temp.value = ''
         vv.sens_VDD.value = ''
@@ -679,8 +696,12 @@ class WindowMemory():
                 vv.POWER_LIMIT.value = 'off'
             else:
                 vv.POWER_LIMIT.value = 'ON'
-        vv.VDDQ_TX.value = mem['REQ_VDDQ_TX_VOLTAGE']
-        vv.VDDQ_TX_ICCMAX.value = mem['REQ_VDDQ_TX_ICCMAX']
+        
+        if 'REQ_VDDQ_TX_VOLTAGE' in mem:
+            vv.VDDQ_TX.value = mem['REQ_VDDQ_TX_VOLTAGE']
+            
+        if 'REQ_VDDQ_TX_ICCMAX' in mem:
+            vv.VDDQ_TX_ICCMAX.value = mem['REQ_VDDQ_TX_ICCMAX']
         
         chan = mem['mc'][mc_id]['channels'][ch_id]
         ci = chan['info']
@@ -714,7 +735,7 @@ class WindowMemory():
         vv.tCKE.value = ci['tCKE']
         vv.tCPDED.value = ci['tCPDED']
         vv.tXP.value = ci['tXP']
-        vv.tXPDLL.value = ci['tXPDLL']
+        vv.tXPDLL.value = ci['tXPDLL'] if 'tXPDLL' in ci else ''
         vv.tXSDLL.value = ci['tXSDLL']
         vv.tPRPDEN.value = ci['tPRPDEN']
         rtl_list = [ '??', '??', '??', '??' ]
@@ -741,18 +762,18 @@ class WindowMemory():
         vv.tWRRD_dd.value = ci['tWRRD_dd']
         vv.tWRWR_dd.value = ci['tWRWR_dd']
 
-        vv.DEC_tCWL.value = ci['DEC_tCWL']
-        vv.ADD_tCWL.value = ci['ADD_tCWL']
+        vv.DEC_tCWL.value = ci['DEC_tCWL'] if 'DEC_tCWL' in ci else ''
+        vv.ADD_tCWL.value = ci['ADD_tCWL'] if 'ADD_tCWL' in ci else ''
         vv.tPPD.value = ci['tPPD']
         vv.tCSL.value = ci['tCSL']
         vv.tCSH.value = ci['tCSH']
         vv.tRFM.value = ci['tRFM']
         vv.oref_ri.value = ci['oref_ri']
-        vv.tZQOPER.value = ci['tZQOPER']
-        vv.tMOD.value = ci['tMOD']
-        vv.X8_DEVICE.value = ci['X8_DEVICE']
-        vv.N_TO_1_RATIO.value = ci['N_TO_1_RATIO']
-        vv.ADD_1QCLK_DELAY.value = ci['ADD_1QCLK_DELAY']
+        vv.tZQOPER.value = ci['tZQOPER'] if 'tZQOPER' in ci else ''
+        vv.tMOD.value = ci['tMOD'] if 'tMOD' in ci else ''
+        vv.X8_DEVICE.value = ci['X8_DEVICE'] if 'X8_DEVICE' in ci else ''
+        vv.N_TO_1_RATIO.value = ci['N_TO_1_RATIO'] if 'N_TO_1_RATIO' in ci else ''
+        vv.ADD_1QCLK_DELAY.value = ci['ADD_1QCLK_DELAY'] if 'ADD_1QCLK_DELAY' in ci else ''
 
         def set_odt_val(mrs, mrs_name, name):
             vv = self.vars
