@@ -291,8 +291,10 @@ def get_undoc_params(tm, info, controller, channel):
     mem = gdict['memory']
     mem_speed = mem['SA']['QCLK'] * 2   # MT/s
     mem["Speed"] = round(mem_speed, 2)
+    mem["tCKmin"] = None
     # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # file "MrcInterface.h"
-    mem["tCKmin"] = round(10**9 / (mem_speed / 2), 2)
+    if mem_speed > 0:
+        mem["tCKmin"] = round(10**9 / (mem_speed / 2), 2)
 
     # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # func "MrcSpdProcessing"
     if info["DDR_TYPE"] == DDR_TYPE.DDR4:
