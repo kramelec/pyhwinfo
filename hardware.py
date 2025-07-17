@@ -8,13 +8,12 @@ import ctypes.wintypes as wintypes
 
 PCI_VENDOR_ID_INTEL = 0x8086
 PCI_VENDOR_ID_AMD   = 0x7808
-VENDOR_ID_RICHTEK   = 0x8C8A  # PMIC on smbus
 
 INTEL_ALDERLAKE           = 0x97   # 12th gen
 INTEL_ALDERLAKE_L         = 0x9A   # 12th gen
-INTEL_RAPTORLAKE          = 0xB7   # 13th gen + 14th gen
+INTEL_RAPTORLAKE          = 0xB7   # 13th gen
 INTEL_RAPTORLAKE_P        = 0xBA   #
-INTEL_RAPTORLAKE_S        = 0xBF   #
+INTEL_RAPTORLAKE_S        = 0xBF   # 14th gen
 INTEL_BARTLETTLAKE        = 0xD7   # Raptor Cove
 INTEL_METEORLAKE          = 0xAC   # Redwood Cove / Crestmont
 INTEL_METEORLAKE_L        = 0xAA   #
@@ -23,6 +22,14 @@ INTEL_ARROWLAKE           = 0xC6
 INTEL_ARROWLAKE_U         = 0xB5
 INTEL_LUNARLAKE_M         = 0xBD   # Lion Cove / Skymont
 INTEL_PANTHERLAKE_L       = 0xCC   # Crestmont
+
+i12_CPU = [ INTEL_ALDERLAKE, INTEL_ALDERLAKE_L ]
+i13_CPU = [ INTEL_RAPTORLAKE, INTEL_RAPTORLAKE_P ]
+i14_CPU = [ INTEL_RAPTORLAKE_S, INTEL_METEORLAKE, INTEL_METEORLAKE_L ]
+i15_CPU = [ INTEL_ARROWLAKE, INTEL_ARROWLAKE_H, INTEL_ARROWLAKE_U ]
+
+i12_FAM = i12_CPU + i13_CPU + i14_CPU
+i15_FAM = i15_CPU
 
 # ref: https://github.com/torvalds/linux/blob/fb4d33ab452ea254e2c319bac5703d1b56d895bf/drivers/i2c/busses/i2c-i801.c#L240
 PCI_ID_SMBUS_INTEL = {
@@ -63,3 +70,14 @@ PCI_ID_SMBUS_INTEL = {
     0xe322: {'name': 'INTEL_PANTHER_LAKE_H_SMBUS' },
     0xe422: {'name': 'INTEL_PANTHER_LAKE_P_SMBUS' },
 }
+
+def getpidsmb(name):
+    for pid, desc in PCI_ID_SMBUS_INTEL.items():
+        if name in desc['name']:
+            return pid
+    return None
+
+i12_SMBUS = [ getpidsmb('ALDER_LAKE_P'), getpidsmb('ALDER_LAKE_M'), getpidsmb('ALDER_LAKE_S') ]
+i14_SMBUS = [ getpidsmb('RAPTOR_LAKE_S'), getpidsmb('METEOR_LAKE_P'), getpidsmb('METEOR_LAKE_PCH_S'), getpidsmb('METEOR_LAKE_SOC_S') ]
+i15_SMBUS = [ getpidsmb('ARROW_LAKE_H') ]
+

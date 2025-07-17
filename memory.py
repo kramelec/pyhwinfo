@@ -24,19 +24,11 @@ from hardware import *
 # DOC: 15th Generation Intel® Core™ Ultra 200S and 200HX Series Processors CFG & MEM Registers
 # ref: https://edc.intel.com/output/DownloadCrifOutput?id=510
 
-proc_fam = None
-proc_model_id = None
+cpu_fam = None
+cpu_id = None
 MCHBAR_BASE = None
 DMIBAR_BASE = None
 gdict = { }
-
-i12_CPU = [ INTEL_ALDERLAKE, INTEL_ALDERLAKE_L ]
-i13_CPU = [ INTEL_RAPTORLAKE, INTEL_RAPTORLAKE_P ]
-i14_CPU = [ INTEL_RAPTORLAKE_S, INTEL_METEORLAKE, INTEL_METEORLAKE_L ]
-i15_CPU = [ INTEL_ARROWLAKE, INTEL_ARROWLAKE_H, INTEL_ARROWLAKE_U ]
-
-i12_FAM = i12_CPU + i13_CPU + i14_CPU
-i15_FAM = i15_CPU
 
 class DDR_TYPE(enum.IntEnum):
     def __new__(cls, value, name, doc = None):
@@ -55,7 +47,7 @@ TREFIMIN_DDR4   = 7800000   # Average periodic refresh interval, in picoseconds 
 TREFIMIN_DDR5   = 1950000   # Average periodic refresh interval, in picoseconds (1.95 us for DDR5)
 TREFIMULTIPLIER = 1000      # tREFI value defined in XMP 1.3 spec is actually in thousands of MTB units. 
 
-g_fake_proc_model_id = None
+g_fake_cpu_id = None
 g_fake_mchbar = None
 
 def phymem_read(addr, size, out_decimal = False):
@@ -68,7 +60,7 @@ def phymem_read(addr, size, out_decimal = False):
     return cpuidsdk64.phymem_read(addr, size, out_decimal)
 
 def get_mchbar_info(info, controller, channel):
-    global gdict, proc_model_id, MCHBAR_BASE 
+    global gdict, cpu_id, MCHBAR_BASE 
     MCHBAR_addr = MCHBAR_BASE + (0x10000 * controller)
     tm = { }    
     if True:
@@ -81,12 +73,12 @@ def get_mchbar_info(info, controller, channel):
         IMC_CR_TC_CAS = 0x070     # CAS timing parameters
         tm["tCL"] = get_bits(data, IMC_CR_TC_CAS, 16, 22)
         tm["tCWL"] = get_bits(data, IMC_CR_TC_CAS, 24, 31)
-        if proc_model_id in i15_FAM:
+        if cpu_id in i15_FAM:
             tm["tCCD_32_byte_CAS_delta"] = get_bits(data, IMC_CR_TC_CAS, 0, 5)
             
         IMC_CR_TC_PRE = 0         # Timing constraints to PRE commands
         tm["tRP"] = get_bits(data, IMC_CR_TC_PRE, 0, 7)
-        if proc_model_id in i12_FAM:
+        if cpu_id in i12_FAM:
             tm["tRPab_ext"] = get_bits(data, IMC_CR_TC_PRE, 8, 12)
             tm["tRDPRE"] = get_bits(data, IMC_CR_TC_PRE, 13, 19)
             tm["tRTP"] = tm["tRDPRE"]
@@ -96,7 +88,7 @@ def get_mchbar_info(info, controller, channel):
             tm["tRAS"] = get_bits(data, IMC_CR_TC_PRE, 42, 50)
             tm["tRCD"] = get_bits(data, IMC_CR_TC_PRE, 51, 58)
             tm["DERATING_EXT"] = get_bits(data, IMC_CR_TC_PRE, 59, 62)
-        if proc_model_id in i15_FAM:
+        if cpu_id in i15_FAM:
             tm["tRPab_ext"] = get_bits(data, IMC_CR_TC_PRE, 10, 17)
             tm["tRDPRE"] = get_bits(data, IMC_CR_TC_PRE, 20, 26)
             tm["tRTP"] = tm["tRDPRE"]
@@ -105,13 +97,13 @@ def get_mchbar_info(info, controller, channel):
             tm["tRAS"] = get_bits(data, IMC_CR_TC_PRE, 45, 53)
             tm["DERATING_EXT"] = get_bits(data, IMC_CR_TC_PRE, 59, 62)
         
-        if proc_model_id in i12_FAM:
+        if cpu_id in i12_FAM:
             IMC_REFRESH_TC = 0x43C     # Refresh timing parameters
             tm["tREFI"] = get_bits(data, IMC_REFRESH_TC, 0, 17)
             tm["tRFC"]  = get_bits(data, IMC_REFRESH_TC, 18, 30)
             tm["tRFC2"] = None
             tm["tRFC4"] = None
-        if proc_model_id in i15_FAM:
+        if cpu_id in i15_FAM:
             IMC_REFRESH_TC = 0x4A0     # Refresh timing parameters
             tm["tREFI"]    = get_bits(data, IMC_REFRESH_TC, 0, 17)
             tm["tRFC"]     = get_bits(data, IMC_REFRESH_TC, 18, 30)
@@ -125,13 +117,13 @@ def get_mchbar_info(info, controller, channel):
         tm["oref_ri"]  = get_bits(data, IMC_REFRESH_AUX, 0, 7)
         tm["REFRESH_HP_WM"]  = get_bits(data, IMC_REFRESH_AUX, 8, 11)
         tm["REFRESH_PANIC_WM"]  = get_bits(data, IMC_REFRESH_AUX, 12, 15)
-        if proc_model_id in i12_FAM:
+        if cpu_id in i12_FAM:
             tm["COUNTTREFIWHILEREFENOFF"]  = get_bits(data, IMC_REFRESH_AUX, 16, 16)
             tm["HPREFONMRS"]  = get_bits(data, IMC_REFRESH_AUX, 17, 17)
             tm["SRX_REF_DEBITS"]  = get_bits(data, IMC_REFRESH_AUX, 18, 19)
             tm["RAISE_BLK_WAIT"]  = get_bits(data, IMC_REFRESH_AUX, 20, 23)
             tm["tREFIx9"]  = get_bits(data, IMC_REFRESH_AUX, 24, 31)   # Should be programmed to 8 * tREFI / 1024 (to allow for possible delays from ZQ or ISOC).
-        if proc_model_id in i12_FAM:
+        if cpu_id in i12_FAM:
             IMC_REFRESH_EXT = 0x488
             tm["PBR_DISABLE"]  = get_bits(data, IMC_REFRESH_EXT, 0, 0)
             tm["PBR_OOO_DIS"]  = get_bits(data, IMC_REFRESH_EXT, 1, 1)
@@ -140,13 +132,13 @@ def get_mchbar_info(info, controller, channel):
             tm["tRFCpb"]   = get_bits(data, IMC_REFRESH_EXT, 10, 20)
         
         tm["tRFM"]     = get_bits(data, 0x40C, 0, 10)    # Default is same as tRFCpb
-        if proc_model_id in i12_FAM:
+        if cpu_id in i12_FAM:
             IMC_CR_TC_ACT = 0x008     # Timing constraints to ACT commands
             tm["tFAW"]     = get_bits(data, IMC_CR_TC_ACT, 0, 8)
             tm["tRRD_sg"]  = get_bits(data, IMC_CR_TC_ACT, 9, 14)
             tm["tRRD_dg"]  = get_bits(data, IMC_CR_TC_ACT, 15, 21)
             tm["tREFSBRD"] = get_bits(data, IMC_CR_TC_ACT, 24, 31)
-        if proc_model_id in i15_FAM:
+        if cpu_id in i15_FAM:
             IMC_CR_TC_ACT = 0x138     # Timing constraints to ACT commands
             tm["tFAW"]     = get_bits(data, IMC_CR_TC_ACT, 0, 8)
             tm["tRRD_sg"]  = get_bits(data, IMC_CR_TC_ACT, 9, 14)
@@ -167,14 +159,14 @@ def get_mchbar_info(info, controller, channel):
         IMC_TC_PWDEN = 0x050     # Power Down Timing
         tm["tCKE"] = get_bits(data, IMC_TC_PWDEN, 0, 6)
         tm["tXP"] = get_bits(data, IMC_TC_PWDEN, 7, 13)
-        if proc_model_id in i12_FAM:
+        if cpu_id in i12_FAM:
             tm["tXPDLL"] = get_bits(data, IMC_TC_PWDEN, 14, 20)
             tm["tRDPDEN"] = get_bits(data, IMC_TC_PWDEN, 21, 28)
             tm["tWRPDEN"] = get_bits(data, IMC_TC_PWDEN, 32, 41)
             tm["tCSH"] = get_bits(data, IMC_TC_PWDEN, 42, 47)
             tm["tCSL"] = get_bits(data, IMC_TC_PWDEN, 48, 53)
             tm["tPRPDEN"] = get_bits(data, IMC_TC_PWDEN, 59, 63)
-        if proc_model_id in i15_FAM:
+        if cpu_id in i15_FAM:
             tm["tCPDED"] = get_bits(data, IMC_TC_PWDEN, 14, 18)
             tm["tRDPDEN"] = get_bits(data, IMC_TC_PWDEN, 19, 26)
             tm["tWRPDEN"] = get_bits(data, IMC_TC_PWDEN, 27, 36)
@@ -185,7 +177,7 @@ def get_mchbar_info(info, controller, channel):
             tm["tPRPDEN"] = get_bits(data, IMC_TC_PWDEN, 59, 63)
         
         IMC_SC_GS_CFG = 0x088   # Scheduler configuration
-        if proc_model_id in i12_FAM:
+        if cpu_id in i12_FAM:
             tm["CMD_STRETCH"] = get_bits(data, IMC_SC_GS_CFG, 3, 4)
             CR_map = { 0: "1N", 1: '2N', 2: '3N', 3: "N:1" }
             tm["tCR"] = CR_map[tm["CMD_STRETCH"]]
@@ -200,7 +192,7 @@ def get_mchbar_info(info, controller, channel):
             tm["WRITE0_ENABLE"] = get_bits(data, IMC_SC_GS_CFG, 49, 49)
             tm["WCKDIFFLOWINIDLE"] = get_bits(data, IMC_SC_GS_CFG, 54, 54)
             tm["tCPDED"] = get_bits(data, IMC_SC_GS_CFG, 56, 60)
-        if proc_model_id in i15_FAM:
+        if cpu_id in i15_FAM:
             tm["CMD_STRETCH"] = get_bits(data, IMC_SC_GS_CFG, 3)
             tm["tCR"] = '1N' if tm["CMD_STRETCH"] == 0 else '2N'
             tm["ADDRESS_MIRROR"] = get_bits(data, IMC_SC_GS_CFG, 8, 11)
@@ -211,7 +203,7 @@ def get_mchbar_info(info, controller, channel):
             tm["WRITE0_ENABLE"] = get_bits(data, IMC_SC_GS_CFG, 49, 49)
             tm["WCKDIFFLOWINIDLE"] = get_bits(data, IMC_SC_GS_CFG, 54, 54)
         
-        if proc_model_id in i12_FAM:
+        if cpu_id in i12_FAM:
             tm["ALLOW_2CYC_B2B_LPDDR"] = get_bits(data, 0x00C, 7, 7)
         
         tm["tRDRD_sg"] = get_bits(data, 0x00C, 0, 6)
@@ -234,20 +226,20 @@ def get_mchbar_info(info, controller, channel):
         tm["tWRWR_dr"] = get_bits(data, 0x018, 16, 22)
         tm["tWRWR_dd"] = get_bits(data, 0x018, 24, 31)
 
-        if proc_model_id in i12_FAM:   # Self-Refresh Timing Parameters
+        if cpu_id in i12_FAM:   # Self-Refresh Timing Parameters
             tm["tXSDLL"]  = get_bits(data, 0x440, 0, 12)
             tm["tZQOPER"] = get_bits(data, 0x440, 16, 23)   # UNDOC
             tm["tMOD"]    = get_bits(data, 0x440, 24, 31)   # UNDOC
 
-        if proc_model_id in i12_FAM:   # Self-Refresh Exit Timing Parameters 
+        if cpu_id in i12_FAM:   # Self-Refresh Exit Timing Parameters 
             tm["tXSR"]    = get_bits(data, 0x4C0, 0, 12)
             tm["tSR"]     = get_bits(data, 0x4C0, 52, 57)
-        if proc_model_id in i15_FAM:   # Self-Refresh Exit Timing Parameters 
+        if cpu_id in i15_FAM:   # Self-Refresh Exit Timing Parameters 
             tm["tXSR"]    = get_bits(data, 0x4C0, 0, 12)
             tm["tSR"]     = get_bits(data, 0x4C0, 45, 50)
             tm["tXSDLL"]  = get_bits(data, 0x4C0, 51, 63)
         
-        if proc_model_id in i12_FAM:
+        if cpu_id in i12_FAM:
             tm["DEC_tCWL"] = get_bits(data, 0x478, 0, 5)   # The number of cycles (DCLK) decreased from tCWL.
             tm["ADD_tCWL"] = get_bits(data, 0x478, 6, 11)  # The number of cycles (DCLK) increased to tCWL.
             tm["ADD_1QCLK_DELAY"] = get_bits(data, 0x478, 12, 12)  # In Gear2, MC QCLK is actually 1xClk of the DDR, the regular MC register can only set even number of cycles (working in Dclk == 2 * 1xClk)
@@ -265,7 +257,7 @@ def get_mchbar_info(info, controller, channel):
         tm["tRTL_2"] = get_bits(data, 0x020, 16, 23)
         tm["tRTL_3"] = get_bits(data, 0x020, 24, 31)
 
-        if proc_model_id in i12_FAM: # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # file "MrcMcRegisterStructAdlExxx.h"
+        if cpu_id in i12_FAM: # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # file "MrcMcRegisterStructAdlExxx.h"
             tm["enable_odt_matrix"] = get_bits(data, IMC_SC_GS_CFG, 24)
             IMC_CR_TC_ODT = 0x070
             tm["ODT_read_duration"] = get_bits(data, IMC_CR_TC_ODT, 0, 3)
@@ -295,7 +287,7 @@ def get_mchbar_info(info, controller, channel):
         get_undoc_params(tm, info, controller, channel)
         get_mrs_storage(data, tm, info, controller, channel)
     else:
-        raise RuntimeError(f'ERROR: Processor model 0x{proc_model_id:X} not supported')
+        raise RuntimeError(f'ERROR: Processor model 0x{cpu_id:X} not supported')
     return tm
     
 def get_undoc_params(tm, info, controller, channel):
@@ -687,14 +679,14 @@ def get_mrs_storage(data, tm, info, controller, channel):
     mr["SelectAllPDA"] = get_bits(mrs_data, mrs_size - 1, 0, 7)
 
 def get_mem_ctrl(ctrl_num):
-    global gdict, proc_fam, proc_model_id, MCHBAR_BASE
+    global gdict, cpu_fam, cpu_id, MCHBAR_BASE
    
     mi = { }
     mi['controller'] = ctrl_num
    
     MC_REGS_SIZE = None
     MCHBAR_addr = MCHBAR_BASE + (0x10000 * ctrl_num)
-    if proc_model_id in i12_FAM or proc_model_id in i15_FAM:
+    if cpu_id in i12_FAM or cpu_id in i15_FAM:
         MC_REGS_SIZE = 0x800
         data_offset = 0xD800  # Inter-Channel Decode Parameters
         MADCH = phymem_read(MCHBAR_addr + data_offset, 4)
@@ -711,7 +703,7 @@ def get_mem_ctrl(ctrl_num):
             raise RuntimeError()
         mi['DDR_type'] = DDR_TYPE(mi["DDR_TYPE"]).name
     else:
-        raise RuntimeError(f'ERROR: Processor model 0x{proc_model_id:X} not supported')
+        raise RuntimeError(f'ERROR: Processor model 0x{cpu_id:X} not supported')
     #print(json.dumps(mi, indent = 4))
     mchan = [ ]
     # 0xD804 - Intra-Channel 0 Decode Parameters
@@ -727,29 +719,29 @@ def get_mem_ctrl(ctrl_num):
         mc["DIMM_L_MAP"] = get_bits(data, 0, 0, 0)  # Virtual DIMM L mapping to physical DIMM: 0 = DIMM0, 1 = DIMM1
         mc["EIM"] = get_bits(data, 0, 8, 8)
         mc["ECC"] = get_bits(data, 0, 12, 13)
-        if proc_model_id in i12_FAM:
+        if cpu_id in i12_FAM:
             mc["CRC"] = get_bits(data, 0, 14, 14)   # CRC Mode: 0 = Disabled  1 = Enabled
         data = phymem_read(MCHBAR_addr + 0xD80C + cnum * 4, 4)
         if data == b'\xFF\xFF\xFF\xFF':
             raise RuntimeError()
         mc["Dimm_L_Size"] = get_bits(data, 0, 0, 6)   # DIMM L Size in 512 MB multiples
-        if proc_model_id in i12_FAM:
+        if cpu_id in i12_FAM:
             mc["DLW"]         = get_bits(data, 0, 7, 8)   # DIMM L width: 0=x8, 1=x16, 2=x32 
             mc["DLNOR"]       = get_bits(data, 0, 9, 10)  # DIMM L ranks: 0=1, 1=2, 2=3, 3=4
-        if proc_model_id in i15_FAM:
+        if cpu_id in i15_FAM:
             mc["DLW"]         = get_bits(data, 0, 7)      # DIMM L width: 0=x8, 1=x16
             mc["DLNOR"]       = get_bits(data, 0, 9)      # DIMM L ranks: 0=1, 1=2
-        if proc_model_id in i12_FAM:
+        if cpu_id in i12_FAM:
             mc["DDR5_DS_8GB"] = get_bits(data, 0, 11, 11) # DIMM S: 1 = 8Gb , 0 = more than 8Gb capacity
             mc["DDR5_DL_8GB"] = get_bits(data, 0, 12, 12) # DIMM L: 0 = DDR5 capacity is more than 8Gb, 1 = DDR5 capacity is 8Gb
         mc["Dimm_S_Size"] = get_bits(data, 0, 16, 22)
-        if proc_model_id in i12_FAM:
+        if cpu_id in i12_FAM:
             mc["DSW"]         = get_bits(data, 0, 24, 25) # DIMM S width: 0=x8, 1=x16, 2=x32
             mc["DSNOR"]       = get_bits(data, 0, 26, 27) # DIMM S ranks: 0=1, 1=2, 2=3, 3=4
-        if proc_model_id in i15_FAM:
+        if cpu_id in i15_FAM:
             mc["DSW"]         = get_bits(data, 0, 24)     # DIMM S width: 0=x8, 1=x16
             mc["DSNOR"]       = get_bits(data, 0, 26)     # DIMM S ranks: 0=1, 1=2
-        if proc_model_id in i12_FAM:    
+        if cpu_id in i12_FAM:    
             mc["BG0_BIT_OPTIONS"] = get_bits(data, 0, 28, 29)
             mc["DECODER_EBH"] = get_bits(data, 0, 30, 31)
         mchan.append( mc )
@@ -761,18 +753,18 @@ def get_mem_ctrl(ctrl_num):
     return mi
 
 def get_mem_info():
-    global gdict, proc_fam, proc_model_id, MCHBAR_BASE, DMIBAR_BASE
+    global gdict, cpu_fam, cpu_id, MCHBAR_BASE, DMIBAR_BASE
     proc_name = GetProcessorSpecification()
     print('Processor:', proc_name)
-    proc_fam = GetProcessorFamily()
-    print('Processor Family: 0x%X' % proc_fam)
-    proc_model_id = GetProcessorExtendedModel() 
-    print('Processor Model ID: 0x%X' % proc_model_id)    
-    if proc_fam != 6:
+    cpu_fam = GetProcessorFamily()
+    print('Processor Family: 0x%X' % cpu_fam)
+    cpu_id = GetProcessorExtendedModel() 
+    print('Processor Model ID: 0x%X' % cpu_id)    
+    if cpu_fam != 6:
         raise RuntimeError(f'ERROR: Currently support only Intel processors')
 
-    if proc_model_id < INTEL_ALDERLAKE:
-        raise RuntimeError(f'ERROR: Processor model 0x{proc_model_id:X} not supported')
+    if cpu_id < INTEL_ALDERLAKE:
+        raise RuntimeError(f'ERROR: Processor model 0x{cpu_id:X} not supported')
 
     MCHBAR_BASE = pci_cfg_read(0, 0, 0, 0x48, '8')
     if (MCHBAR_BASE & 1) != 1:
@@ -802,8 +794,8 @@ def get_mem_info():
     gdict = { }
     cpu = gdict['cpu'] = { }
     board = gdict['board'] = { }
-    cpu['family'] = proc_fam
-    cpu['model_id'] = proc_model_id
+    cpu['family'] = cpu_fam
+    cpu['model_id'] = cpu_id
     cpu['name'] = proc_name.replace('(R)', '').replace('(TM)', '')
     
     gdict['CAP'] = { }
@@ -825,12 +817,12 @@ def get_mem_info():
     cap['DDRSZ'] = get_bits(CAP_A, 0, 19, 20)  # DRAM Maximum Size per Channel
     DRAM_SIZE_map = { 0: None, 1: '8GB', 2: '4GB', 3: '2GB' }
     cap['DDRSZ_max'] = DRAM_SIZE_map[cap['DDRSZ']]
-    if proc_model_id in i12_FAM:
+    if cpu_id in i12_FAM:
         cap['DMIG2'] = True if get_bits(CAP_A, 0, 22, 22) == 0 else False  # DMIG2DIS: DMI GEN2 Status
     cap['VTD'] = True if get_bits(CAP_A, 0, 23, 23) == 0 else False  # VTDD:  VT-d status
     cap['FDEE'] = get_bits(CAP_A, 0, 24, 24)  # Force DRAM ECC Enable
     cap['ECC'] = True if get_bits(CAP_A, 0, 25, 25) == 0 else False  # ECCDIS : DRAM ECC status
-    if proc_model_id in i12_FAM:
+    if cpu_id in i12_FAM:
         cap['DW'] = 'x4' if get_bits(CAP_A, 0, 26, 26) == 0 else 'x2'   # DMI Width
     cap['PELWU'] = True if get_bits(CAP_A, 0, 27, 27) == 0 else False  # PELWUD : PCIe Link Width Up-config
     CAP_B = pci_cfg_read(0, 0, 0, 0xE8, 4)  # Capabilities B. Processor capability enumeration.
@@ -843,13 +835,13 @@ def get_mem_info():
     cap['DEV10'] = True if get_bits(CAP_B, 0, 10) == 0 else False    # DEV10_DISABLED
     cap['HDCP'] = True if get_bits(CAP_B, 0, 11) == 0 else False     # HDCPD
     cap['LTECH'] = get_bits(CAP_B, 0, 12, 14)    
-    if proc_model_id in i12_FAM:
+    if cpu_id in i12_FAM:
         cap['DMIG3'] = True if get_bits(CAP_B, 0, 15) == 0 else False   # DMIG3DIS 
         cap['PEGX16'] = True if get_bits(CAP_B, 0, 16) == 0 else False    # PEGX16D
-    if proc_model_id in i15_FAM:
+    if cpu_id in i15_FAM:
         cap['CDIE'] = True if get_bits(CAP_B, 0, 17) == 0 else False    # CDIE_?DISABLE
     cap['PKGTYP'] = get_bits(CAP_B, 0, 19)    
-    if proc_model_id in i12_FAM:
+    if cpu_id in i12_FAM:
         cap['PEGG3'] = True if get_bits(CAP_B, 0, 20) == 0 else False    # PEGG3_DIS
     cap['PLL_REF100_CFG'] = get_bits(CAP_B, 0, 21, 23)  # DDR Maximum Frequency Capability with 100MHz memory reference clock (ref_clk). 0: 100 MHz memory reference clock is not supported / 1-6: Reserved / 7: Unlimited
     cap['SVM'] = True if get_bits(CAP_B, 0, 24) == 0 else False  # SVM_DISABLE  
@@ -865,19 +857,19 @@ def get_mem_info():
     BCLK_OC_map = { 0: 'disabled', 1: 'max=115MHz', 2: 'max=130MHz', 3: 'unlimited' }
     cap['BCLKOC_freq_limit'] = BCLK_OC_map[cap['BCLKOCRANGE']]
     cap['QCLK_GV'] = True if get_bits(CAP_C, 0, 14) == 0 else False   # QCLK_GV_DIS
-    if proc_model_id in i15_FAM:
+    if cpu_id in i15_FAM:
         cap['VPU'] = True if get_bits(CAP_C, 0, 15) == 0 else False   # VPU_?DIS
     cap['LPDDR4_EN'] = get_bits(CAP_C, 0, 16)
     cap['MAX_DATA_RATE_LPDDR4'] = get_bits(CAP_C, 0, 17, 21)
     cap['DDR4_EN'] = get_bits(CAP_C, 0, 22)
     cap['MAX_DATA_RATE_DDR4'] = get_bits(CAP_C, 0, 23, 27)
-    if proc_model_id in i12_FAM:
+    if cpu_id in i12_FAM:
         cap['PEGG4'] = True if get_bits(CAP_C, 0, 28) == 0 else False   # PEGG4_DIS
         cap['PEGG5'] = True if get_bits(CAP_C, 0, 29) == 0 else False   # PEGG5_DIS
         cap['PEG61'] = True if get_bits(CAP_C, 0, 30) == 0 else False   # PEG61D
     CAP_E = pci_cfg_read(0, 0, 0, 0xF0, 4)  # Capabilities E. Processor capability enumeration.
     cap['LPDDR5_EN'] = get_bits(CAP_E, 0, 0)
-    if proc_model_id in i12_FAM:
+    if cpu_id in i12_FAM:
         cap['MAX_DATA_RATE_LPDDR5'] = get_bits(CAP_E, 0, 1, 5)
         cap['MAX_DATA_FREQ_LPDDR5'] = None
         cap['DDR5_EN'] = get_bits(CAP_E, 0, 6)
@@ -885,7 +877,7 @@ def get_mem_info():
         cap['MAX_DATA_FREQ_DDR5'] = None
         cap['IBECC'] = True if get_bits(CAP_E, 0, 12) == 0 else False  # IBECC_DIS
         VDDQ_VOLTAGE_MAX = get_bits(CAP_E, 0, 13, 23)
-    if proc_model_id in i15_FAM:
+    if cpu_id in i15_FAM:
         cap['MAX_DATA_RATE_LPDDR5'] = get_bits(CAP_E, 0, 1, 8)
         cap['MAX_DATA_FREQ_LPDDR5'] = None
         cap['DDR5_EN'] = get_bits(CAP_E, 0, 9)
@@ -897,9 +889,9 @@ def get_mem_info():
     cap['MAX_DATA_FREQ_DDR5'] = cap['MAX_DATA_RATE_DDR5'] * 266
     cap['VDDQ_VOLTAGE_MAX'] = round(VDDQ_VOLTAGE_MAX * 5 / 1000, 3)  # VDDQ_TX Maximum VID value (granularity UNDOC !!!)
 
-    if g_fake_proc_model_id:
-        proc_model_id = g_fake_proc_model_id
-        cpu['model_id'] = proc_model_id
+    if g_fake_cpu_id:
+        cpu_id = g_fake_cpu_id
+        cpu['model_id'] = cpu_id
 
     gdict['memory'] = { }
     mi = gdict['memory']
@@ -909,13 +901,13 @@ def get_mem_info():
     data = phymem_read(MCHBAR_BASE + 0x5F60, 8)
     BCLK_FREQ = get_bits(data, 0, 0, 31) / 1000.0  # Reported BCLK Frequency in KHz
     mi['BCLK_FREQ'] = round(BCLK_FREQ, 3)
-    if proc_model_id in i15_FAM:
+    if cpu_id in i15_FAM:
         mi['SOCBCLK_FREQ'] = mi['BCLK_FREQ']
         CPUBCLK_FREQ = get_bits(data, 0, 32, 63) / 1000.0  # Reported PCIE BCLK Frequency in Khz
         mi['CPUBCLK_FREQ'] = round(CPUBCLK_FREQ, 3)
 
     pw = mi['POWER'] = { }
-    if proc_model_id in i12_FAM:
+    if cpu_id in i12_FAM:
         data = phymem_read(MCHBAR_BASE + 0x58E0, 8)   # DDR Power Limit
         pw['LIMIT1_POWER'] = get_bits(data, 0, 0, 14) * 0.125   # Power Limit 1 (PL1) for DDR domain in Watts. Format is U11.3: Resolution 0.125W, Range 0-2047.875W
         pw['LIMIT1_ENABLE'] = get_bits(data, 0, 15, 15)         # Power Limit 1 (PL1) enable bit for DDR domain
@@ -926,10 +918,10 @@ def get_mem_info():
         pw['limits_LOCKED'] = get_bits(data, 0, 63, 63)  # When set, this entire register becomes read-only. This bit will typically be set by BIOS during boot.
     data = phymem_read(MCHBAR_BASE + 0x58F0, 4)   # Package RAPL Performance Status
     pw['RAPL_COUNTS'] = get_bits(data, 0, 0, 31)
-    if proc_model_id in i12_FAM:
+    if cpu_id in i12_FAM:
         data = phymem_read(MCHBAR_BASE + 0x5920, 4)   # Primary Plane Turbo Policy
         pw['PRIPTP'] = get_bits(data, 0, 0, 4)  # Priority Level. A higher number implies a higher priority.
-    if proc_model_id in i15_FAM:
+    if cpu_id in i15_FAM:
         data = phymem_read(MCHBAR_BASE + 0x5920, 4)   # GT IA Performance BIAS
         pw['IA_PERF_MULTIPLIER'] = get_bits(data, 0, 0, 15)   # IA Performance Multiplier, in U1.15 format
         pw['GT_PERF_MULTIPLIER'] = get_bits(data, 0, 16, 31)  # GT Performance Multiplier, in U1.15 format
@@ -970,7 +962,7 @@ def get_mem_info():
     sa['SA_VOLTAGE'] = get_bits(data, 0, 40, 55)  # Reports the System Agent voltage in u3.13 format. Conversion to Volts: V = SA_VOLTAGE / 8192.0
     sa['SA_VOLTAGE'] = round(sa['SA_VOLTAGE'] / 8192, 3)
 
-    if proc_model_id in i12_FAM:
+    if cpu_id in i12_FAM:
         bios = mi['BIOS_REQUEST'] = { }
         data = phymem_read(MCHBAR_BASE + 0x5E00, 4)   # Memory Controller BIOS Request
         MC_PLL_RATIO = get_bits(data, 0, 0, 7) # This field holds the memory controller frequency (QCLK).
@@ -993,7 +985,7 @@ def get_mem_info():
         bios['REQ_VDDQ_TX_VOLTAGE'] = round(get_bits(data, 0, 17, 26) * 5 / 1000, 3) # Voltage of the VDDQ TX rail at this clock frequency and gear configuration. Described in 5mV resolution
         bios['REQ_VDDQ_TX_ICCMAX'] = round(get_bits(data, 0, 27, 30) * 0.25, 3)  # Described in 0.25A resolution. IccMax: 32 * 0.25 = 8A
 
-    if proc_model_id in i15_FAM:
+    if cpu_id in i15_FAM:
         bios = mi['BIOS_REQUEST'] = { }
         data = phymem_read(MCHBAR_BASE + 0x13D08, 4)   # MemSS PMA BIOS request register
         bios['QCLK_REF_FREQ'] = 33.33 # MHz
@@ -1011,7 +1003,7 @@ def get_mem_info():
         bios['QCLK_FREQ'] = round(bios['QCLK_RATIO'] * bios['QCLK_REF_FREQ'], 2)
         bios['GEAR'] = 2 if get_bits(data, 0, 8) == 0 else 4
 
-    if proc_model_id in i12_FAM:
+    if cpu_id in i12_FAM:
         data = phymem_read(MCHBAR_BASE + 0x5F00, 4)   # System Agent Power Management Control
         mi['SACG_ENA'] = get_bits(data, 0, 0, 0)  # This bit is used to enable or disable the System Agent Clock Gating (FCLK) : 0 = Not Allow , 1 = Allow
         mi['MPLL_OFF_ENA'] = get_bits(data, 0, 1, 1)  # This bit is used to enable shutting down the Memory Controller PLLs (MCPLL and GDPLL).   0b: PLL shutdown is not allowed   1b: PLL shutdown is allowed
@@ -1064,7 +1056,7 @@ if __name__ == "__main__":
             fn = sys.argv[2]
             with open(fn, 'rb') as file:
                 g_fake_mchbar = file.read()
-            g_fake_proc_model_id = int(sys.argv[3])
+            g_fake_cpu_id = int(sys.argv[3])
     
     SdkInit(None, 0)
     out = get_mem_info()
