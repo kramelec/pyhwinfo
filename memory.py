@@ -499,11 +499,8 @@ def get_mrs_storage(data, tm, info, controller, channel):
                 if flag:
                     MR34 = pos + 1
                     break
-            elif cpu_id in i15_FAM:
-                flag = get_bits(mrs_data, pos, 0, 7) == 0xD5  # ???????
-                if flag:
-                    MR34 = pos + 4
-                    break
+        if cpu_id in i15_FAM:
+            MR34 = MR37 - 3
     mr['MR34_offset'] = MR34
     if MR34:
         if cpu_id in i15_FAM:
