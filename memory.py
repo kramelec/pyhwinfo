@@ -985,7 +985,7 @@ def get_mem_info():
     if cpu_id in i15_FAM:
         bios = mi['BIOS_REQUEST'] = { }
         data = phymem_read(MCHBAR_BASE + 0x13D08, 4)   # MemSS PMA BIOS request register
-        bios['QCLK_REF_FREQ'] = 33.33 # MHz
+        bios['QCLK_REF_FREQ'] = 33.334 # MHz
         bios['QCLK_RATIO'] = get_bits(data, 0, 0, 7)
         bios['QCLK_FREQ'] = round(bios['QCLK_RATIO'] * bios['QCLK_REF_FREQ'], 2)
         bios['GEAR'] = 2 if get_bits(data, 0, 8) == 0 else 4
@@ -995,7 +995,7 @@ def get_mem_info():
 
         bios = mi
         data = phymem_read(MCHBAR_BASE + 0x13D10, 4)   # MemSS PMA BIOS data register
-        bios['QCLK_REF_FREQ'] = 33.33 # MHz
+        bios['QCLK_REF_FREQ'] = 33.334 # MHz
         bios['QCLK_RATIO'] = get_bits(data, 0, 0, 7)
         bios['QCLK_FREQ'] = round(bios['QCLK_RATIO'] * bios['QCLK_REF_FREQ'], 2)
         bios['GEAR'] = 2 if get_bits(data, 0, 8) == 0 else 4
