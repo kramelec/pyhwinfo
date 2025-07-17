@@ -219,6 +219,7 @@ PMIC_RICHTEK_R1A = 0x1A  # VIN state    (RW)
 PMIC_RICHTEK_R1B = 0x1B  # VIN state    (RW)
 PMIC_RICHTEK_R30 = 0x30  # ADC state    (RW)     # ADC (Analog to Digital Conversion)
 PMIC_RICHTEK_R31 = 0x31  # ADC Read Out (RO)
+PMIC_RICHTEK_R3B = 0x3B  # Revision ID
 PMIC_RICHTEK_R3C = 0x3C  # Vendor ID (2 bytes)
 
 PMIC_RICHTEK_ADC_ENABLE  = 0x80  # look desc of PMIC_RICHTEK_R30
@@ -258,6 +259,14 @@ def mem_pmic_read(slot):
         if vid != 0x0A0C:   # Richtek
             print(f'ERROR: pmic 0x{vid:04X} not supported')
             return out
+        
+        val = smbus_read_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, PMIC_RICHTEK_R3B)  # PMIC Revision ID
+        cur_capab = get_bits(val, 0, 0)     # PMIC Current Capability
+        rev_minor = get_bits(val, 0, 1, 3)  # Minor Revision ID
+        rev_major = get_bits(val, 0, 4, 5)  # Minor Revision ID
+        print(f'PMIC Revision = {rev_major}.{rev_minor}  [{cur_capab}]')
+        out['revision'] = f'{rev_major}.{rev_minor}'
+        out['current_capability'] = cur_capab
 
         def pmic_read_adc(adc_sel):
             cmd = SETDIM(adc_sel, 4) << 3  # look "ADC Select" in doc DSQ5119A-02.pdf
