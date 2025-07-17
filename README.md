@@ -19,7 +19,7 @@ Python module for retrieving hardware information
 
 * only Windows (Win7+)
 * only Intel platform
-* only 12th,13th,14th generations of CPU
+* only 12th,13th,14th,15th generations of CPU
 * only DDR5 (DDR4 not tested)
 
 ## Donations
