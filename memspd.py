@@ -229,6 +229,7 @@ PMIC_RICHTEK_ADC_SWA      = 0x00
 PMIC_RICHTEK_ADC_SWB      = 0x01
 PMIC_RICHTEK_ADC_SWC      = 0x02
 PMIC_RICHTEK_ADC_SWD      = 0x03
+PMIC_RICHTEK_ADC_NULL     = 0x04   # Reserved
 PMIC_RICHTEK_ADC_VIN_BULK = 0x05
 PMIC_RICHTEK_ADC_VIN_MGMT = 0x06
 PMIC_RICHTEK_ADC_VIN_BIAS = 0x07
@@ -268,17 +269,44 @@ def mem_pmic_read(slot):
         out['revision'] = f'{rev_major}.{rev_minor}'
         out['current_capability'] = cur_capab
 
+        def get_pmic_adc_command(adc_sel, upd_freq = 1):
+            ADC_REGISTER_UPDATE_FREQUENCY = [ 1, 2, 4, 8 ]  # milisec table  # ref: DSQ5119A-02.pdf  page 106  
+            if upd_freq in ADC_REGISTER_UPDATE_FREQUENCY:
+                updFreq = ADC_REGISTER_UPDATE_FREQUENCY.index(upd_freq)  # select code for 1 ms
+            else:
+                raise RuntimeError()
+            return PMIC_RICHTEK_ADC_ENABLE | (SETDIM(adc_sel, 4) << 3) | updFreq  # ref: "ADC Select" in doc DSQ5119A-02.pdf
+        
         def pmic_read_adc(adc_sel):
-            cmd = SETDIM(adc_sel, 4) << 3  # look "ADC Select" in doc DSQ5119A-02.pdf
-            cmd |= PMIC_RICHTEK_ADC_ENABLE
+            # prepare R31 for NULL value
+            cmd = get_pmic_adc_command(PMIC_RICHTEK_ADC_NULL)
             smbus_write_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, PMIC_RICHTEK_R30, cmd)
-            state = smbus_read_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, PMIC_RICHTEK_R30)
-            value = smbus_read_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, PMIC_RICHTEK_R31)
-            return value if state == cmd else None
+            ok = False
+            for trynum in range(0, 4):
+                state = smbus_read_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, PMIC_RICHTEK_R30)
+                if state != cmd:
+                    return None  # ERROR
+                value = smbus_read_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, PMIC_RICHTEK_R31)
+                if value == 0:
+                    ok = True
+                    break
+            if not ok:
+                return None
+            # process requested ADC reading
+            cmd = get_pmic_adc_command(adc_sel)
+            smbus_write_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, PMIC_RICHTEK_R30, cmd)
+            for trynum in range(0, 4):
+                state = smbus_read_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, PMIC_RICHTEK_R30)
+                if state != cmd:
+                    return None  # ERROR
+                value = smbus_read_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, PMIC_RICHTEK_R31)
+                if value != 0:
+                    return value
+            return None
 
         def voltage_decode(val, mult = 0.015):  # look doc: DSQ5119A-02.pdf  page 107  table "R31 - ADC Read"
             if val is None:
-                return -1
+                return None
             val = val * mult
             return round(val, 3)
 
