@@ -749,52 +749,8 @@ def get_mem_ctrl(ctrl_num):
         mchan[channel]['info'] = get_mchbar_info(mi, ctrl_num, channel)
     return mi
 
-def get_mem_info():
-    global gdict, cpu_fam, cpu_id, MCHBAR_BASE, DMIBAR_BASE
-    proc_name = GetProcessorSpecification()
-    print('Processor:', proc_name)
-    cpu_fam = GetProcessorFamily()
-    print('Processor Family: 0x%X' % cpu_fam)
-    cpu_id = GetProcessorExtendedModel() 
-    print('Processor Model ID: 0x%X' % cpu_id)    
-    if cpu_fam != 6:
-        raise RuntimeError(f'ERROR: Currently support only Intel processors')
-
-    if cpu_id < INTEL_ALDERLAKE:
-        raise RuntimeError(f'ERROR: Processor model 0x{cpu_id:X} not supported')
-
-    MCHBAR_BASE = pci_cfg_read(0, 0, 0, 0x48, '8')
-    if (MCHBAR_BASE & 1) != 1:
-        raise RuntimeError(f'ERROR: Readed incorrect MCHBAR_BASE = 0x{MCHBAR_BASE:X}')
-    if MCHBAR_BASE < 0xFE000000 or MCHBAR_BASE >= 0xFFFFFFFF - 0x10000 * 3:
-        raise RuntimeError(f'ERROR: Readed incorrect MCHBAR_BASE = 0x{MCHBAR_BASE:X}')
-    MCHBAR_BASE = MCHBAR_BASE - 1
-    print(f'MCHBAR_BASE = 0x{MCHBAR_BASE:X}')
-
-    dmibar_addr = pci_cfg_read(0, 0, 0, 0x68, '8')
-    DMIBAR_EN = get_bits(dmibar_addr, 0, 0, 1)
-    if not DMIBAR_EN:
-        print(f'DMIBAR_EN = False (0x{dmibar_addr:08X})')
-    else:
-        DMIBAR_addr = get_bits(dmibar_addr, 0, 12, 41)
-        DMIBAR_BASE = DMIBAR_addr << 12
-        print(f'DMIBAR_BASE = 0x{DMIBAR_BASE:X}')
-        DMI_DeviceId = phymem_read(DMIBAR_BASE, 4)
-        DMI_VID = get_bits(DMI_DeviceId, 0, 0, 15)
-        DMI_DID = get_bits(DMI_DeviceId, 0, 16, 31)
-        print(f'DMI_VID = 0x{DMI_VID:X}  DMI_DID = 0x{DMI_DID:X}')
-        if DMI_VID != PCI_VENDOR_ID_INTEL:
-            raise RuntimeError(f'ERROR: Currently support only Intel processors')
-
-    #mchbar_mmio = MCHBAR_BASE + 0x6000
-
-    gdict = { }
-    cpu = gdict['cpu'] = { }
-    board = gdict['board'] = { }
-    cpu['family'] = cpu_fam
-    cpu['model_id'] = cpu_id
-    cpu['name'] = proc_name.replace('(R)', '').replace('(TM)', '')
-    
+def get_mem_capabilities():
+    global gdict, cpu_id
     gdict['CAP'] = { }
     cap = gdict['CAP']
 
@@ -885,6 +841,54 @@ def get_mem_info():
     cap['MAX_DATA_FREQ_LPDDR5'] = cap['MAX_DATA_RATE_LPDDR5'] * 266
     cap['MAX_DATA_FREQ_DDR5'] = cap['MAX_DATA_RATE_DDR5'] * 266
     cap['VDDQ_VOLTAGE_MAX'] = round(VDDQ_VOLTAGE_MAX * 5 / 1000, 3)  # VDDQ_TX Maximum VID value (granularity UNDOC !!!)
+
+def get_mem_info():
+    global gdict, cpu_fam, cpu_id, MCHBAR_BASE, DMIBAR_BASE
+    proc_name = GetProcessorSpecification()
+    print('Processor:', proc_name)
+    cpu_fam = GetProcessorFamily()
+    print('Processor Family: 0x%X' % cpu_fam)
+    cpu_id = GetProcessorExtendedModel() 
+    print('Processor Model ID: 0x%X' % cpu_id)    
+    if cpu_fam != 6:
+        raise RuntimeError(f'ERROR: Currently support only Intel processors')
+
+    if cpu_id < INTEL_ALDERLAKE:
+        raise RuntimeError(f'ERROR: Processor model 0x{cpu_id:X} not supported')
+
+    MCHBAR_BASE = pci_cfg_read(0, 0, 0, 0x48, '8')
+    if (MCHBAR_BASE & 1) != 1:
+        raise RuntimeError(f'ERROR: Readed incorrect MCHBAR_BASE = 0x{MCHBAR_BASE:X}')
+    if MCHBAR_BASE < 0xFE000000 or MCHBAR_BASE >= 0xFFFFFFFF - 0x10000 * 3:
+        raise RuntimeError(f'ERROR: Readed incorrect MCHBAR_BASE = 0x{MCHBAR_BASE:X}')
+    MCHBAR_BASE = MCHBAR_BASE - 1
+    print(f'MCHBAR_BASE = 0x{MCHBAR_BASE:X}')
+
+    dmibar_addr = pci_cfg_read(0, 0, 0, 0x68, '8')
+    DMIBAR_EN = get_bits(dmibar_addr, 0, 0, 1)
+    if not DMIBAR_EN:
+        print(f'DMIBAR_EN = False (0x{dmibar_addr:08X})')
+    else:
+        DMIBAR_addr = get_bits(dmibar_addr, 0, 12, 41)
+        DMIBAR_BASE = DMIBAR_addr << 12
+        print(f'DMIBAR_BASE = 0x{DMIBAR_BASE:X}')
+        DMI_DeviceId = phymem_read(DMIBAR_BASE, 4)
+        DMI_VID = get_bits(DMI_DeviceId, 0, 0, 15)
+        DMI_DID = get_bits(DMI_DeviceId, 0, 16, 31)
+        print(f'DMI_VID = 0x{DMI_VID:X}  DMI_DID = 0x{DMI_DID:X}')
+        if DMI_VID != PCI_VENDOR_ID_INTEL:
+            raise RuntimeError(f'ERROR: Currently support only Intel processors')
+
+    #mchbar_mmio = MCHBAR_BASE + 0x6000
+
+    gdict = { }
+    cpu = gdict['cpu'] = { }
+    board = gdict['board'] = { }
+    cpu['family'] = cpu_fam
+    cpu['model_id'] = cpu_id
+    cpu['name'] = proc_name.replace('(R)', '').replace('(TM)', '')
+
+    get_mem_capabilities()
 
     if g_fake_cpu_id:
         cpu_id = g_fake_cpu_id
