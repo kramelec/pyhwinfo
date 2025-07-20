@@ -559,7 +559,7 @@ class WindowMemory():
         btn_frame = ttk.Frame(main_frame)
         btn_frame.pack(fill=tk.X, pady=3)
 
-        btn_dump = ttk.Button(btn_frame, text="Dump to file", command = self.button_click_dump)
+        btn_dump = ttk.Button(btn_frame, text="Save to file", command = self.button_click_dump)
         btn_dump.pack(side=tk.LEFT)
 
         btn_refresh = ttk.Button(btn_frame, text="Refresh", command = self.button_click_refresh)
@@ -857,7 +857,7 @@ class WindowMemory():
 
     def button_click_dump(self):
         from datetime import datetime
-        print("Button Dump clicked!")
+        #print("Button Save clicked!")
         if 'time' in self.mem_info:
             dt = datetime.strptime(self.mem_info['time'], "%Y-%m-%d %H:%M:%S")
             dt = dt.strftime("%Y-%m-%d_%H%M")
@@ -866,6 +866,7 @@ class WindowMemory():
         fn = f'IMC_{dt}.json'
         with open(fn, 'w') as file:
             json.dump(self.mem_info, file, indent = 4)
+        print(f'File "{fn}" created')
 
 if __name__ == "__main__":
     test = False
