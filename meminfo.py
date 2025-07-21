@@ -234,16 +234,17 @@ class WindowMemory():
                     vstyle = 'fixV.TLabel'
                     ttk.Label(col, textvariable=value, style=vstyle, width=w, anchor=anchor).pack(fill=tk.X, pady=1)
             
-        vv.BCLK = WinVar('???')
+        vv.BCLK_M = WinVar('???')
         vv.MCLK_RATIO = WinVar('??')
         vv.MCLK_FREQ  = WinVar('???')
+        vv.BCLK_U = WinVar('???')
         vv.UCLK_RATIO = WinVar('???')
         vv.UCLK_FREQ  = WinVar('???')
         
         create_freq_col([ "", "MCLK", "UCLK" ], w = 5)
         create_freq_col([ "Rate", vv.MCLK_RATIO, vv.UCLK_RATIO ], w = 6)
         create_freq_col([ "", "x", "x" ], w = 1)
-        create_freq_col([ "BCLK", vv.BCLK, vv.BCLK ], w = 8)
+        create_freq_col([ "BCLK", vv.BCLK_M, vv.BCLK_U ], w = 8)
         create_freq_col([ "", "=", "=" ], w = 1)
         create_freq_col([ "Frequency", vv.MCLK_FREQ, vv.UCLK_FREQ ], w = 10)
         create_freq_col([ "", "MHz", "MHz" ], w = 4, anchor = tk.W)
@@ -626,20 +627,25 @@ class WindowMemory():
             vv.PMIC_name.value = vendor
         
         QCLK_RATIO = 0
-        vv.BCLK.value = mem['BCLK_FREQ']
+        vv.BCLK_M.value = mem['BCLK_FREQ']
         if mem['SA']['QCLK_RATIO']:
             QCLK_RATIO = mem['SA']['QCLK_RATIO']
             vv.MCLK_RATIO.value = QCLK_RATIO
             vv.MCLK_FREQ.value  = mem['SA']['QCLK_FREQ']
+            base_freq = 133.34 if mem['SA']['QCLK_REFERENCE'] == 0 else mem['SA']['QCLK_FREQ'] / QCLK_RATIO
+            vv.BCLK_M.value = round(base_freq, 2)
         elif 'QCLK_RATIO' in mem and mem['QCLK_RATIO']:
-            MCLK_FREQ = mem['QCLK_FREQ']
-            QCLK_RATIO = int(round((MCLK_FREQ + 36) / mem['BCLK_FREQ']))
+            QCLK_FREQ = mem['QCLK_FREQ']
+            base_freq = mem['BCLK_FREQ']
+            QCLK_RATIO = int(round((QCLK_FREQ + 36) / base_freq))
             vv.MCLK_RATIO.value = QCLK_RATIO
-            vv.MCLK_FREQ.value  = MCLK_FREQ
+            vv.MCLK_FREQ.value  = QCLK_FREQ
+            vv.BCLK_M.value = round(base_freq, 2)
         else:
             vv.MCLK_RATIO.value = 0
             vv.MCLK_FREQ.value  = 0
         
+        vv.BCLK_U.value = mem['BCLK_FREQ']
         vv.UCLK_RATIO.value = mem['SA']['UCLK_RATIO']
         vv.UCLK_FREQ.value  = mem['SA']['UCLK']
         if mem['mc'][0]['DDR_ver'] == 5:

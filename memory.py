@@ -949,8 +949,8 @@ def get_mem_info():
     sa['QCLK_REF_FREQ'] = QCLK_REF_FREQ
     sa['QCLK_RATIO'] = get_bits(data, 0, 2, 9)  # Reference clock is determined by the QCLK_REFERENCE field.
     sa['QCLK_FREQ'] = round(sa['QCLK_RATIO'] * mi['BCLK_FREQ'], 3)
-    #if sa['QCLK_REFERENCE'] == 0:
-    #    sa['QCLK'] = round(sa['QCLK'] * 1.33, 3)
+    if sa['QCLK_REFERENCE'] == 0 and mi['BCLK_FREQ'] < 126:
+        sa['QCLK_FREQ'] = round(sa['QCLK_RATIO'] * 133.34, 3)
     sa['OPI_LINK_SPEED'] = get_bits(data, 0, 11, 11)  # 0: 2Gb/s    1: 4Gb/s
     sa['IPU_IS_DIVISOR'] = get_bits(data, 0, 12, 17)  # The frequency is 1600MHz/Divisor 
     sa['IPU_IS_freq'] = 1600 / sa['IPU_IS_DIVISOR'] if sa['IPU_IS_DIVISOR'] > 0 else None
