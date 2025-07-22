@@ -616,7 +616,7 @@ class WindowMemory():
                 if not vendor:
                     vendor = '0x%04X' % spd['die_vendorid']
                 if 'die_stepping' in spd:
-                    vendor += f' [0x{spd["die_vendorid"]:02X}]'
+                    vendor += f' [0x{spd["die_stepping"]:02X}]'
                 vv.die_vendor_list[slot].value = vendor
         
         vv.PMIC_name.value = ''
