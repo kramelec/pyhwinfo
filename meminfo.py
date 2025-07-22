@@ -12,6 +12,7 @@ from tkinter import ttk
 from tkextrafont import load_extrafont
 
 from hardware import *
+from jep106 import *
 from memory import *
 
 __author__ = 'remittor'
@@ -53,6 +54,31 @@ class WinVar(tk.Variable):
     @value.setter 
     def value(self, val): 
         self.set(val)
+
+def get_pretty_vendor_name(name_or_vid):
+    if isinstance(name_or_vid, int):
+        vid = name_or_vid
+        if vid not in jep106:
+            return f'0x{vid:04X}'
+        name = jep106[vid]
+    else:
+        name = name_or_vid
+    name = name + ' '
+    name = name.replace(' Corporation ', ' ')
+    name = name.replace(' Corp ', ' ')
+    name = name.replace(' Corp. ', ' ')
+    name = name.replace(' Co ', ' ')
+    name = name.replace(' Incorporated ', ' ')
+    name = name.replace(' Inc. ', ' ')
+    name = name.replace(' Inc ', ' ')
+    name = name.replace(' Ltd. ', ' ')
+    name = name.replace(' Ltd ', ' ')
+    name = name.replace(' Technologies ', ' Tech ')
+    name = name.replace(' Technology ', ' Tech ')
+    name = name.replace(' Limited ', ' ')
+    name = name.replace(' Laboratories ', ' Lab ')
+    name = name.replace('  ', ' ')
+    return name.strip()
 
 class WindowMemory():
     def __init__(self):
@@ -606,25 +632,18 @@ class WindowMemory():
             slot_count += 1
             spd = elem['SPD'] if 'SPD' in elem else None
             if spd:
-                vendor = spd['vendor']
-                if not vendor:
-                    vendor = '0x%04X' % spd['vendorid']
+                vendor = get_pretty_vendor_name(spd['vendorid'])
                 ranks = '  (' + str(spd['ranks']) + 'R)'
                 vv.dram_model_list[slot].value = vendor + '  ' + spd['part_number'] + ranks
             if spd and 'die_vendorid' in spd and spd['die_vendorid']:
-                vendor = spd['die_vendor'] if 'die_vendor' in spd else None
-                if not vendor:
-                    vendor = '0x%04X' % spd['die_vendorid']
+                vendor = get_pretty_vendor_name(spd['die_vendorid'])
                 if 'die_stepping' in spd:
                     vendor += f' [0x{spd["die_stepping"]:02X}]'
                 vv.die_vendor_list[slot].value = vendor
         
         vv.PMIC_name.value = ''
         if cur_dimm and 'PMIC' in cur_dimm and cur_dimm['PMIC']:
-            vendor = cur_dimm['PMIC']['vendor']
-            if not vendor:
-                vendor = '0x%04X' % cur_dimm['PMIC']['vid']
-            vv.PMIC_name.value = vendor
+            vv.PMIC_name.value = get_pretty_vendor_name(cur_dimm['PMIC']['vid'])
         
         QCLK_RATIO = 0
         vv.BCLK_M.value = mem['BCLK_FREQ']
