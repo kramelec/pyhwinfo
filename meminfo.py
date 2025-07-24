@@ -114,6 +114,7 @@ class WindowMemory():
         if self.mem_info:
             mem = self.mem_info['memory']
 
+        self.cpu_id = self.mem_info['cpu']['model_id'] if self.mem_info else None
         self.dimm_count = 4
 
         # Main container
@@ -645,28 +646,34 @@ class WindowMemory():
         if cur_dimm and 'PMIC' in cur_dimm and cur_dimm['PMIC']:
             vv.PMIC_name.value = get_pretty_vendor_name(cur_dimm['PMIC']['vid'])
         
+        MCLK_FREQ = ''
         QCLK_RATIO = 0
+        vv.MCLK_RATIO.value = ''
         vv.BCLK_M.value = mem['BCLK_FREQ']
-        if mem['SA']['QCLK_RATIO']:
+        vv.MCLK_FREQ.value = ''
+
+        if self.cpu_id in i12_FAM and mem['SA']['QCLK_RATIO']:
             QCLK_RATIO = mem['SA']['QCLK_RATIO']
             vv.MCLK_RATIO.value = QCLK_RATIO
-            vv.MCLK_FREQ.value  = mem['SA']['QCLK_FREQ']
+            MCLK_FREQ = mem['SA']['QCLK_FREQ']
             base_freq = 133.34 if mem['SA']['QCLK_REFERENCE'] == 0 else mem['SA']['QCLK_FREQ'] / QCLK_RATIO
             vv.BCLK_M.value = round(base_freq, 2)
-        elif 'QCLK_RATIO' in mem and mem['QCLK_RATIO']:
+
+        if self.cpu_id in i15_FAM and 'QCLK_RATIO' in mem and mem['QCLK_RATIO']:
+            # ref: https://skatterbencher.com/2024/10/24/arrow-lake-memss-overclocking/
             QCLK_FREQ = mem['QCLK_FREQ']
-            base_freq = mem['BCLK_FREQ']
-            QCLK_RATIO = int(round((QCLK_FREQ + 36) / base_freq))
-            vv.MCLK_RATIO.value = QCLK_RATIO
-            vv.MCLK_FREQ.value  = QCLK_FREQ
-            vv.BCLK_M.value = round(base_freq, 2)
-        else:
-            vv.MCLK_RATIO.value = 0
-            vv.MCLK_FREQ.value  = 0
+            CMI_RATIO = mem['QCLK_RATIO']
+            vv.MCLK_RATIO.value = CMI_RATIO
+            MCLK_FREQ = QCLK_FREQ
+            vv.BCLK_M.value = round(QCLK_FREQ / CMI_RATIO, 2)
+
+        if MCLK_FREQ:
+            vv.MCLK_FREQ.value = round(MCLK_FREQ, 2)
         
         vv.BCLK_U.value = mem['BCLK_FREQ']
         vv.UCLK_RATIO.value = mem['SA']['UCLK_RATIO']
         vv.UCLK_FREQ.value  = mem['SA']['UCLK']
+        
         if mem['mc'][0]['DDR_ver'] == 5:
             max_chan_count = len(mem['mc']) * len(mem['mc'][0]['channels'])
             chan_count = 0
@@ -680,15 +687,22 @@ class WindowMemory():
         else:
             vv.chan_count.value = '?'
         
-        vv.gear_mode.value = ''
+        gear = ''
         if 'GEAR' in mem:
-            vv.gear_mode.value = mem['GEAR']
+            gear = mem['GEAR']
         elif 'GEAR' in mem['mc'][0]['channels'][0]['info']:
-            vv.gear_mode.value = mem['mc'][0]['channels'][0]['info']['GEAR']
-        
-        vv.mem_freq.value = int(float(vv.MCLK_FREQ.value) * 2)
-        if mem['BCLK_FREQ'] > 98 and mem['BCLK_FREQ'] < 105:
-            vv.mem_freq.value = QCLK_RATIO * 100 * 2
+            gear = mem['mc'][0]['channels'][0]['info']['GEAR']
+        vv.gear_mode.value = gear
+       
+        vv.mem_freq.value = ''
+        if MCLK_FREQ:
+            speed = int(MCLK_FREQ * 2)
+            if speed >= 990:
+                if str(int(speed / 10)).endswith('9'):
+                    speed += 10
+                if str(int(speed / 10)).endswith('0'):
+                    speed = int(speed / 10) * 10
+            vv.mem_freq.value = speed
 
         vv.sens_Temp.value = ''
         vv.sens_VDD.value = ''
