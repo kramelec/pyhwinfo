@@ -372,7 +372,8 @@ def mem_pmic_read(slot):
 # =================================================================================================
 
 # https://github.com/memtest86plus/memtest86plus/blob/2f9b165eec4de20ec4b23725c90d3989517ee3fe/system/x86/i2c.c#L80
-def find_smb_controller(check_pci_did = True):
+def find_smb_controllers(check_pci_did = True):
+    res = [ ]
     for bus in range(0, 0xFF, 0x80):
         for dev in range(0, 32):
             for fun in range(0, 8):
@@ -396,7 +397,30 @@ def find_smb_controller(check_pci_did = True):
                     continue
                 if subclass != 0x05:     # SMBus Controller        # source: https://wiki.osdev.org/PCI
                     continue
-                return (vid, did, bus, dev, fun)
+                res.append( (vid, did, bus, dev, fun, ) )
+    return res
+
+def find_spd_smbus(check_pci_did = True):
+    global smb_addr
+    saved_smb_addr = smb_addr
+    try:
+        smb_list = find_smb_controllers(check_pci_did)
+        if smb_list:
+            for snum, (vid, did, bus, dev, fun) in enumerate(smb_list):
+                offset = 0x10 + 4 * 4   # BAR4 - SMBus Addr
+                smbus_addr = pci_cfg_read(bus, dev, fun, offset, size = '4')
+                if (smbus_addr & 1) == 0:
+                    print(f'WARN: wrong SMBus addr = 0x{smbus_addr:X}  ({bus:02X}:{dev:02X}:{fun:02X}  VID = 0x{vid:04X}  DID = 0x{did:04X})')
+                    continue  # incorret value
+                smb_addr = smbus_addr - 1
+                slot = 0
+                vendorid = mem_spd_read_reg(slot, SPD5_MR3, 2)  # MR3 + MR4 => Vendor ID
+                if not vendorid:
+                    print(f'WARN: wrong SMBus addr = 0x{smbus_addr:X}  Reason: VendorID = NULL')
+                    continue  # Cannot read VendorID from SPD
+                return smb_list[snum]
+    finally:
+        smb_addr = saved_smb_addr
     return None
 
 def check_smbus_mutex():
@@ -457,9 +481,10 @@ def get_mem_spd_info(slot, mem_info: dict, with_pmic = True):
         raise RuntimeError(f'ERROR: Processor model 0x{cpu["model_id"]:X} not supported')
 
     if not g_smbus['cfg_addr']:
-        smbus_dev = find_smb_controller(check_pci_did = True)
+        smbus_dev = find_spd_smbus(check_pci_did = True)
         if not smbus_dev:
-            raise RuntimeError('ERROR: Cannot found PCH with SMBus controller')
+            print('ERROR: Cannot found PCH with SMBus controller')
+            return None
         (vid, did, bus, dev, fun) = smbus_dev 
     else:
         vid = g_smbus['pch_vid']
@@ -492,6 +517,7 @@ def get_mem_spd_info(slot, mem_info: dict, with_pmic = True):
 
     vendorid = mem_spd_read_reg(slot, SPD5_MR3, 2)  # MR3 + MR4 => Vendor ID
     if not vendorid:
+        print(f'WARN: Cannot read VendorID from SPD#{slot}')
         return None
 
     spd_vid = jep106decode(vendorid)
