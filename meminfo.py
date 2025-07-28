@@ -19,6 +19,8 @@ from hardware import *
 from jep106 import *
 from memory import *
 
+from mem_helpers import *
+
 __author__ = 'remittor'
 
 from version import appver
@@ -96,6 +98,7 @@ class WindowMemory():
         self.test = False
         self.sdk_inited = False
         self.mem_info = None
+        self.advanced_tooltip = AdvancedTooltip(self.root)
         
     def init_styles(self):
         try:
@@ -134,6 +137,16 @@ class WindowMemory():
         vv.cpu_name = WinVar('?????????')
         cpu_label = ttk.Label(cpu_frame, textvariable=vv.cpu_name, style='Title.TLabel')
         cpu_label.pack(side=tk.LEFT, padx = 5, pady = 1)
+        
+        # Add advanced info button with info icon
+        info_btn = tk.Button(cpu_frame, text="ℹ", font=("Segoe UI", 12, "bold"), 
+                            bg="#4CAF50", fg="white", width=3, height=1,
+                            command=self.advanced_tooltip.show_advanced_info,
+                            relief=tk.RAISED, borderwidth=2, cursor="hand2")
+        info_btn.pack(side=tk.RIGHT, padx=5, pady=1)
+        
+        # Add tooltip for the info button
+        ToolTip(info_btn, "Click for comprehensive DDR5 optimization guide, JEDEC validation info,\narchitectural insights, and advanced timing explanations not available\nin regular tooltips. Includes overclocking guidelines, platform-specific\noptimizations, and detailed technical references.")
         
         mboard_frame = ttk.Frame(main_frame)
         mboard_frame.pack(fill=tk.X, pady=1)
