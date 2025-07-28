@@ -36,6 +36,7 @@ class WinVar(tk.Variable):
         tk.Variable.__init__(self, master, value, name)
         if value is not None:
             self._default = str(value)
+        self.label = None
 
     def value_to_str(self, value):
         if isinstance(value, float) and math.isnan(value):
@@ -44,7 +45,12 @@ class WinVar(tk.Variable):
             return str(round(value, 2))
         return str(value)
 
-    def set(self, value):
+    def set(self, value, style = None):
+        if self.label:
+            if style is None:
+                self.label.configure(style='fixV.TLabel')
+            else:
+                self.label.configure(style=style)
         value = str(value)
         return self._tk.globalsetvar(self._name, value)
 
@@ -412,7 +418,7 @@ class WindowMemory():
             label_widget = ttk.Label(frame, textvariable=var, style='fixV.TLabel', width=wv, anchor='center')
             label_widget.pack(side=tk.LEFT)
             # Store reference to label widget for style changes
-            setattr(vv, name + '_label', label_widget)
+            var.label = label_widget
             # Add tooltip if formula exists
             if name in self.m_inf.timing_formulas:
                 tooltip_text = self.m_inf.timing_formulas[name]

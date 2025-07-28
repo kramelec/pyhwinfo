@@ -1140,7 +1140,7 @@ def validate_timings(self, ci, MCLK_FREQ):
         # Perform JEDEC validation
         if value and str(value).isdigit():
             validation = jedec_validate_timing(param_name, int(value), memory_speed, tck_avg_ns)
-            label_widget = getattr(vv, param_name + '_label', None)
+            label_widget = var.label
             if label_widget:
                 style_name = get_timing_validation_style(validation)
                 label_widget.configure(style=style_name)
