@@ -1,4 +1,5 @@
 import sys
+import math
 import json
 import types
 
@@ -833,4 +834,345 @@ Board tuning & thermal design matter for extreme overclocking
 """
 }
 
+# ====================================================================================================
+
+def jedec_calculate_nck(timing_ns, tck_avg_ns, use_integer_math = True):
+    """Calculate nCK value using JEDEC rounding algorithms
+    
+    Args:
+        timing_ns: Timing parameter in nanoseconds
+        tck_avg_ns: Average clock period in nanoseconds
+        use_integer_math: Use JEDEC integer math algorithm (preferred)
+    
+    Returns:
+        Integer nCK value
+    """
+    # Validate inputs
+    if not timing_ns or not tck_avg_ns or tck_avg_ns <= 0:
+        return 0
+        
+    if use_integer_math:
+        # JEDEC Integer Math Algorithm (Section 13.2.2)
+        # nCK = truncate(((parameter_in_ps x 1000) / application_tCK_in_ps_(RD)) + 990) / 1000
+        timing_ps = int(timing_ns * 1000)
+        tck_avg_ps = int(tck_avg_ns * 1000)  # Rounded down to 1ps
+        if tck_avg_ps == 0:
+            return 0
+        temp_nck = ((timing_ps * 1000) // tck_avg_ps) + 990
+        return temp_nck // 1000
+    else:
+        # JEDEC Real Number Math Algorithm (Section 13.2.1)
+        # nCK = ceiling((parameter_in_ns / application_tCK_in_ns_(RD)) - 0.01)
+        temp_nck = (timing_ns / tck_avg_ns) - 0.01
+        return math.ceil(temp_nck)
+
+def jedec_validate_timing(param_name, actual_nck, memory_speed, tck_avg_ns):
+    """Validate timing parameter against JEDEC specifications
+    
+    Args:
+        param_name: Name of timing parameter (e.g., 'tCL', 'tRCD')
+        actual_nck: Actual nCK value from memory controller
+        memory_speed: Memory speed in MT/s (e.g., 4800, 5600)
+        tck_avg_ns: Average clock period in nanoseconds
+        
+    Returns:
+        dict with validation results
+    """
+    global m_inf
+     # Find closest JEDEC speed grade
+    closest_speed = min(m_inf.jedec_timings.keys(), key=lambda x: abs(x - memory_speed))
+    jedec_spec = m_inf.jedec_timings.get(closest_speed, {})
+    
+    # Map parameter names to JEDEC specifications
+    param_map = {
+        'tCL': 'tAA_min',
+        'tRCD': 'tRCD_min', 
+        'tRP': 'tRP_min',
+        'tRAS': 'tRAS_min',
+        'tWR': 'tWR_min',
+        'tRTP': 'tRTP_min',
+        'tFAW': 'tFAW_min',
+        'tRRD_L': 'tRRD_L_min',
+        'tRRD_S': 'tRRD_S_min',
+        'tWTR_L': 'tWTR_L_min',
+        'tWTR_S': 'tWTR_S_min'
+    }
+    
+    result = {
+        'is_valid': True,
+        'jedec_min_nck': None,
+        'actual_nck': actual_nck,
+        'margin': None,
+        'compliance': 'UNKNOWN'
+    }
+    
+    if param_name in param_map and param_map[param_name] in jedec_spec:
+        timing_min_ns = jedec_spec[param_map[param_name]]
+        
+        # Calculate minimum nCK according to JEDEC
+        jedec_min_nck = jedec_calculate_nck(timing_min_ns, tck_avg_ns)
+        
+        # Apply special constraints for DDR5
+        # Note: DDR5 dual subchannel design changes traditional timing constraints
+        if param_name in ['tRRD_L', 'tRRD_S']:
+            jedec_min_nck = max(8, jedec_min_nck)
+        elif param_name == 'tWTR_L':
+            jedec_min_nck = max(16, jedec_min_nck)
+        elif param_name == 'tWTR_S':
+            jedec_min_nck = max(4, jedec_min_nck)
+        elif param_name == 'tRTP':
+            jedec_min_nck = max(12, jedec_min_nck)
+        elif param_name == 'tFAW':
+            # tFAW DDR5 ELECTRICAL DESIGN ANALYSIS:
+            # • tFAW should ALWAYS be 32 on UDIMM electrical design (optimal for 1KB pagesize)
+            # • 4-activate window timing is LEGACY - DDR5 dual subchannel design eliminates this constraint
+            # • tFAW 32 = perfect parallelization, never lower for optimal DDR5 performance
+            # • Lowering below 32 ruins parallelization, halves PHY work, reduces burst efficiency
+            # • Only 48 on 2 ICs per subchannel with 2KB pagesize (rare configurations)
+            # • ForthACT Window timing is legacy - doesn't apply to DDR5 dual subchannel per side
+            # • CPU PHY interleaving matured enough that 4 IC access is not limiting factor
+            if actual_nck == 32:
+                result['compliance'] = 'OPTIMAL_DDR5'  # Perfect for DDR5 UDIMM 1KB pagesize
+                result['is_valid'] = True
+                result['margin'] = 0  # Exactly optimal
+                return result  # Skip JEDEC calculation - 32 is architecturally optimal
+            elif actual_nck >= 32 and actual_nck <= 48:
+                result['compliance'] = 'JEDEC_GOOD'   # Acceptable range for special designs
+            elif actual_nck < 32:
+                result['compliance'] = 'DDR5_SUBOPTIMAL'  # Ruins parallelization
+            else:
+                # Use JEDEC calculation for values > 48
+                pass
+            
+        result['jedec_min_nck'] = jedec_min_nck
+        result['is_valid'] = actual_nck >= jedec_min_nck
+        result['margin'] = actual_nck - jedec_min_nck
+        
+        if result['is_valid']:
+            if result['margin'] == 0:
+                result['compliance'] = 'JEDEC_MIN'
+            elif result['margin'] <= 2:
+                result['compliance'] = 'JEDEC_TIGHT'
+            else:
+                result['compliance'] = 'JEDEC_LOOSE'
+        else:
+            result['compliance'] = 'VIOLATION'
+    
+    # Special validation for tRC (should equal tRAS + tRP)
+    if param_name == 'tRC':
+        # This will be handled separately in the update function
+        pass
+        
+    return result
+
+def get_mr13_for_data_rate(data_rate):
+    """Get the expected MR13 OP[3:0] value for a given data rate
+    
+    Args:
+        data_rate: Memory data rate in MT/s
+        
+    Returns:
+        dict with MR13 information or None if not found
+    """
+    global m_inf
+    for mr13_value, config in m_inf.mr13_timing_table.items():
+        if 'reserved' not in config:
+            min_rate, max_rate = config['data_rate_range']
+            if min_rate <= data_rate <= max_rate:
+                return {
+                    'mr13_value': mr13_value,
+                    'binary': f'0b{mr13_value:04b}',
+                    'hex': f'0x{mr13_value:X}',
+                    'config': config
+                }
+    return None
+
+def validate_mr13_timings(data_rate, actual_timings):
+    """Validate actual timings against MR13 specifications
+    
+    Args:
+        data_rate: Memory data rate in MT/s
+        actual_timings: Dict of actual timing values
+        
+    Returns:
+        dict with validation results
+    """
+    global m_inf
+    mr13_info = get_mr13_for_data_rate(data_rate)
+    if not mr13_info:
+        return {'valid': False, 'reason': 'Data rate not found in MR13 table'}
+    
+    expected_config = mr13_info['config']
+    results = {}
+    
+    # Check tCCD_L timing parameters if available
+    timing_checks = ['tCCD_L', 'tCCD_L_WR', 'tCCD_L_WR2', 'tDDLK']
+    for timing in timing_checks:
+        if timing in expected_config and timing in actual_timings:
+            expected = expected_config[timing]
+            actual = actual_timings[timing]
+            # Handle None values
+            if actual is not None and expected is not None:
+                results[timing] = {
+                    'expected': expected,
+                    'actual': actual,
+                    'valid': actual >= expected,
+                    'margin': actual - expected
+                }
+            else:
+                results[timing] = {
+                    'expected': expected,
+                    'actual': actual,
+                    'valid': None,  # Cannot validate
+                    'margin': None
+                }
+    
+    return {
+        'valid': all(r.get('valid', True) for r in results.values() if r.get('valid') is not None),
+        'mr13_info': mr13_info,
+        'timing_results': results
+    }
+
+def get_timing_validation_style(validation_result):
+    """Get TTK style name based on validation result"""
+    if not validation_result['is_valid']:
+        return 'fixV_violat.TLabel'     # Red for JEDEC violations
+    elif validation_result['compliance'] == 'OPTIMAL_DDR5':
+        return 'fixV_optim.TLabel'      # Bright green for optimal DDR5 values
+    elif validation_result['compliance'] == 'DDR5_SUBOPTIMAL':
+        return 'fixV_violat.TLabel'     # Red for DDR5 architectural violations (tFAW < 32)
+    elif validation_result['compliance'] in ['JEDEC_MIN', 'JEDEC_GOOD']:
+        return 'fixV_valid.TLabel'      # Green for exactly meeting JEDEC or good range
+    elif validation_result['compliance'] == 'JEDEC_TIGHT':
+        return 'fixV_tight.TLabel'      # Yellow for tight but valid
+    else:
+        return 'fixV.TLabel'            # Default white for loose/unknown
+
+def validate_timings(self, ci, MCLK_FREQ):
+    global m_inf
+    vv = self.vars
+    # Get memory speed and clock period for JEDEC validation
+    memory_speed = int(vv.mem_freq.value) if vv.mem_freq.value and vv.mem_freq.value != '????' else 4800
+    if MCLK_FREQ and MCLK_FREQ > 0:
+        tck_avg_ns = 1.0 / (MCLK_FREQ * 2 * 1e6)  # Convert MHz to ns (divide by 2 for DDR)
+    else:
+        tck_avg_ns = 0.416  # Default for DDR5-4800
+    
+    # Ensure tck_avg_ns is reasonable (between 0.1ns and 2.0ns for DDR5)
+    if tck_avg_ns <= 0 or tck_avg_ns > 2.0:
+        tck_avg_ns = 0.416  # Fallback to DDR5-4800 default
+    
+    # Update timing values with JEDEC validation
+    timing_params = [
+        ('tCL', ci['tCL']),
+        ('tRCD', ci['tRCD']),
+        ('tRP', ci['tRP']),
+        ('tRAS', ci['tRAS']),
+        ('tWR', ci['tWR']),
+        ('tRTP', ci['tRTP']),
+        ('tFAW', ci['tFAW']),
+        ('tRRD_L', ci['tRRD_L']),
+        ('tRRD_S', ci['tRRD_S']),
+        ('tWTR_L', ci['tWTR_L']),
+        ('tWTR_S', ci['tWTR_S'])
+    ]
+    
+    # Validate against MR13 specifications for DDR5
+    mr13_validation = None
+    if memory_speed:
+        actual_timings = {
+            'tCCD_L': ci.get('tCCD_L', None),
+            'tCCD_L_WR': ci.get('tCCD_L_WR', None), 
+            'tCCD_L_WR2': ci.get('tCCD_L_WR2', None),
+            'tDDLK': ci.get('tDDLK', None)
+        }
+        mr13_validation = validate_mr13_timings(memory_speed, actual_timings)
+    
+    # IMPORTANT: Unlike HWiNFO, ATC, and MemTweak which often use incorrect software math,
+    # this implementation reads actual hardware registers and validates against real JEDEC specs.
+    # Many tools get RDWR/WRRD calculations wrong due to complex PHY dependencies.
+    #
+    # WHY OTHER TOOLS GET IT WRONG:
+    # - HWiNFO, ATC, MemTweak all use software math instead of reading hardware registers
+    # - tRDWR won't work correctly on 2DPC configurations (higher delays required)
+    # - RDWR/WRRD/WTR calculations are skewed due to wrong mathematical assumptions
+    # - All turnaround timings depend on CAS/CWL/Dec-Add_tCWL mix & Board Layout
+    # - Intel + Altera recommend NOT pushing frequent RDWR for max efficiency
+    # - FW (UEFI/BIOS) knows best and defaults to higher delays by PHY design
+    # - Early FW got math wrong, today software still gets it wrong
+    # - Only hardware register readout provides accurate validation
+    #
+    # DDR5 WRITE BEHAVIOR DEEP ANALYSIS ( Knowledge):
+    # - Writes DON'T follow BurstChop8 (per subchannel individually)
+    # - Sequential writes: 4+8+break, 4+8+break pattern
+    # - Writes within reads: read → write tick 4 → BC8 ends → 2nd subchannel starts
+    # - Between writes: 8 ticks optimal, but not BC8 focused
+    # - Subchannel individual PHY: non-delayed writes to 4 DIMM places
+    # - Optimal: 4 writes across 4 subchannels within BL16 without overlaps
+    # - Zero relation to BurstChop - separated but optimally read-aligned
+    # - Writes can trigger anytime, optimally burst-aligned, no ongoing limits
+    #
+    # OPTIMAL DDR5 TARGETS ( Verified 6000-9000 MT/s):
+    # - tFAW: 32 tCK (NEVER lower - ruins parallelization) ← THIS IS OPTIMAL!
+    # - tRRD_S: 8 tCK (architectural minimum for DDR5 dual subchannel)
+    # - tRRD_L: 12 tCK (density dependent, can be 8-10 for some speeds)
+    # - tWTR_S: 4 tCK (exactly half of tRRD_S, dynamic scheduling capable)
+    # - tWTR_L: 24 tCK (can tune to 18 or 12+3/4 with ise)
+    #
+    # WHY tFAW < 32 IS HARMFUL:
+    # - Completely ruins DDR5 parallelization design
+    # - Halves PHY work on CPU side (reduces efficiency)
+    # - Creates smaller access possibility with barely utilized burst length
+    # - Visually lower timings but destroys DDR5's architectural benefits
+    # - ForthACT Window timing is LEGACY - DDR5 dual subchannel eliminates this
+    #
+    #  INSIGHT: "If you cut FAW, you completely ruin parallelization"
+    # "Smaller access possibility and barely utilised burst length"
+    # "Lower delay required. Visually lower timings but ruins reason of DDR5s design"
+    # "Also halves the work of PHYs on the CPU side and lowers strain"
+    # "Please never lower than RRDS 8 or FAW 32"
+    
+    # Set values and validate against JEDEC
+    for param_name, value in timing_params:
+        var = getattr(vv, param_name)
+        var.value = value
+        
+        # Perform JEDEC validation
+        if value and str(value).isdigit():
+            validation = jedec_validate_timing(param_name, int(value), memory_speed, tck_avg_ns)
+            label_widget = getattr(vv, param_name + '_label', None)
+            if label_widget:
+                style_name = get_timing_validation_style(validation)
+                label_widget.configure(style=style_name)
+                
+                # Update tooltip with validation info
+                if hasattr(label_widget, 'tooltip'):
+                    base_tooltip = m_inf.timing_formulas.get(param_name, f"{param_name} timing parameter")
+                    validation_info = f"\n\n--- JEDEC Validation ---\n"
+                    validation_info += f"Memory Speed: DDR5-{memory_speed}\n"
+                    validation_info += f"tCK(avg): {tck_avg_ns:.3f}ns\n"
+                    validation_info += f"Actual: {value} tCK\n"
+                    if validation['jedec_min_nck']:
+                        validation_info += f"JEDEC Min: {validation['jedec_min_nck']} tCK\n"
+                        validation_info += f"Margin: +{validation['margin']} tCK\n"
+                    validation_info += f"Status: {validation['compliance']}"
+                    
+                    # Add MR13 validation info if available
+                    if mr13_validation and mr13_validation.get('valid') and mr13_validation.get('mr13_info'):
+                        mr13_info = mr13_validation['mr13_info']
+                        validation_info += f"\n\n--- MR13 Mode Register Validation ---\n"
+                        validation_info += f"Expected MR13 OP[3:0]: {mr13_info['binary']} ({mr13_info['hex']})\n"
+                        validation_info += f"Data Rate Range: {mr13_info['config']['description']}\n"
+                        
+                        timing_results = mr13_validation.get('timing_results', {})
+                        for timing_name, result in timing_results.items():
+                            if timing_name in ['tCCD_L', 'tCCD_L_WR', 'tCCD_L_WR2']:
+                                status = "✓ PASS" if result['valid'] else "✗ FAIL"
+                                validation_info += f"{timing_name}: {result['actual']} tCK (min: {result['expected']}) {status}\n"
+                    
+                    # Create new tooltip with validation info
+                    old_tooltip = getattr(label_widget, 'tooltip', None)
+                    if old_tooltip:
+                        old_tooltip.hidetip()
+                    label_widget.tooltip = ToolTip(label_widget, base_tooltip + validation_info)
 

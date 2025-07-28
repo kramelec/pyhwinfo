@@ -115,10 +115,22 @@ class WindowMemory():
         style.configure('val.TLabel', font=('Consolas', 10), padding=1, background="white", foreground="black", relief="groove", borderwidth=2)
         style.configure('Small.TLabel', font=('Consolas', 8))
 
-        style.configure('fixT.TLabel', font=('Intel One Mono Medium', 10), padding=0)
-        style.configure('fixV.TLabel', font=('Intel One Mono Medium', 10), padding=0, background="white", foreground="black", relief="groove", borderwidth=2)
-        style.configure('fixV2.TLabel', font=('Segoe UI', 10), padding=0, background="white", foreground="black", relief="groove", borderwidth=2)
-        style.configure('fixA.TLabel', font=('Intel One Mono Medium', 8))
+        xfont = ('Intel One Mono Medium', 10)
+        ufont = ('Segoe UI', 10)
+
+        style.configure('fixT.TLabel',         font=xfont, padding=0)
+        style.configure('fixV.TLabel',         font=xfont, padding=0, background="white",   foreground="black", relief="groove", borderwidth=2)
+        style.configure('fixV2.TLabel',        font=ufont, padding=0, background="white",   foreground="black", relief="groove", borderwidth=2)
+        style.configure('fixA.TLabel',         font=xfont)
+
+        # Light green for JEDEC compliant
+        style.configure('fixV_valid.TLabel',   font=xfont, padding=0, background="#90EE90", foreground="black", relief="groove", borderwidth=2)
+        # Bright green for optimal DDR5 values
+        style.configure('fixV_optim.TLabel',   font=xfont, padding=0, background="#00FF7F", foreground="black", relief="groove", borderwidth=2)
+        # Light yellow for tight timing
+        style.configure('fixV_tight.TLabel',   font=xfont, padding=0, background="#FFFF99", foreground="black", relief="groove", borderwidth=2)
+        # Light red for violations
+        style.configure('fixV_violat.TLabel',  font=xfont, padding=0, background="#FFB6C1", foreground="black", relief="groove", borderwidth=2)
 
     def create_window(self):
         vv = self.vars
@@ -880,6 +892,8 @@ class WindowMemory():
             set_odt_val(mrs, 'RttCK_B', "CK_B")
             set_odt_val(mrs, 'RttCS_B', "CS_B")
             set_odt_val(mrs, 'RttCA_B', "CA_B")
+
+        validate_timings(self, ci, MCLK_FREQ)
 
         self.current_slot = slot_id
         self.current_mc = mc_id
