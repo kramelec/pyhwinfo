@@ -156,7 +156,7 @@ def MASKED(value, bits):
 
 def ROUNDUP(value, bnum):
     """roundup a value to N x bnum"""
-    return (val + bnum - 1) & ~(bnum - 1)
+    return (value + bnum - 1) & ~(bnum - 1)
 
 def ROUNDUP4(value):
     return (value + 3) & 0xFFFFFFFC
@@ -420,7 +420,8 @@ class Win32FileHandle:
             handle = _win32.CreateMutexW(lpMutexAttributes, bInitialOwner, obj_path)
         self.errcode = ctypes.get_last_error()
         self.release_on_close = release_on_close
-        self.is_acquired = False
+        # If we created a mutex with bInitialOwner=True, it starts in acquired state
+        self.is_acquired = bInitialOwner and not open
         self.is_mutex = True
         if not handle:
             if throwable:
@@ -454,7 +455,7 @@ class Win32FileHandle:
         if rc != STATUS_WAIT_0 and throwable:
             if not self.msgerr:
                 raise RuntimeError(f'ERROR: Cannot acquire a mutex "{self.name}"')
-            raise RuntimeError(f'ERROR: {msgerr}')
+            raise RuntimeError(f'ERROR: {self.msgerr}')
         if rc == STATUS_WAIT_0:
             self.is_acquired = True
             return True
