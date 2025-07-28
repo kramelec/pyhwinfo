@@ -1176,3 +1176,42 @@ def validate_timings(self, ci, MCLK_FREQ):
                         old_tooltip.hidetip()
                     label_widget.tooltip = ToolTip(label_widget, base_tooltip + validation_info)
 
+    # Validate tCWL should typically be tCL - 2
+    if ci['tCL'] and ci['tCWL']:
+        expected_tCWL = ci['tCL'] - 2
+        tCWL = getattr(vv, 'tCWL', None)
+        if tCWL and tCWL.label:
+            if ci['tCWL'] == expected_tCWL:
+                tCWL.label.configure(style='fixV_valid.TLabel')
+            elif abs(ci['tCWL'] - expected_tCWL) <= 1:
+                tCWL.label.configure(style='fixV_tight.TLabel')
+            else:
+                tCWL.label.configure(style='fixV.TLabel')
+
+    # Validate Intel BIOS turnaround formulas if possible
+    if ci.get('tCWL') and ci.get('tWTR_L') and ci.get('tWRRD_sg'):
+        # Intel BIOS: tWTR_L = tWRRD_sg - tCWL - BurstLength/2 - 2
+        # BurstLength for DDR5 = 16 (8 data transfers × 2 for DDR)
+        burst_length = 16
+        expected_tWTR_L = ci['tWRRD_sg'] - ci['tCWL'] - burst_length//2 - 2
+        tWTR_L = getattr(vv, 'tWTR_L', None)
+        if tWTR_L and tWTR_L.label:
+            if abs(ci['tWTR_L'] - expected_tWTR_L) <= 1:
+                # BIOS formula matches - highlight in green
+                tWTR_L.label.configure(style='fixV_valid.TLabel')
+            else:
+                tWTR_L.label.configure(style='fixV_tight.TLabel')
+    
+    if ci.get('tCWL') and ci.get('tWTR_S') and ci.get('tWRRD_dg'):
+        # Intel BIOS: tWTR_S = tWRRD_dg - tCWL - BurstLength/2 - 2
+        # BurstLength for DDR5 = 16 (8 data transfers × 2 for DDR)
+        burst_length = 16
+        expected_tWTR_S = ci['tWRRD_dg'] - ci['tCWL'] - burst_length//2 - 2
+        tWTR_S = getattr(vv, 'tWTR_S', None)
+        if tWTR_S and tWTR_S.label:
+            if abs(ci['tWTR_S'] - expected_tWTR_S) <= 1:
+                # BIOS formula matches - highlight in green
+                tWTR_S.label.configure(style='fixV_valid.TLabel')
+            else:
+                tWTR_S.label.configure(style='fixV_tight.TLabel')
+
