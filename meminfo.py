@@ -19,6 +19,7 @@ from hardware import *
 from jep106 import *
 from memory import *
 
+import mem_helpers
 from mem_helpers import *
 
 __author__ = 'remittor'
@@ -99,6 +100,7 @@ class WindowMemory():
         self.sdk_inited = False
         self.mem_info = None
         self.advanced_tooltip = AdvancedTooltip(self.root)
+        self.m_inf = mem_helpers.m_inf
         
     def init_styles(self):
         try:
@@ -390,6 +392,21 @@ class WindowMemory():
         ]
         create_col_ctrl(elems, wn = 7, wv = 7)
         
+        def draw_timing_label_and_value(base_frame, name, var, wn, wv):
+            nonlocal vv
+            frame = ttk.Frame(base_frame)
+            frame.pack(fill=tk.X, pady=1)
+            ttk.Label(frame, text=name, style='fixT.TLabel', width=wn, anchor=tk.W).pack(side=tk.LEFT)
+            label_widget = ttk.Label(frame, textvariable=var, style='fixV.TLabel', width=wv, anchor='center')
+            label_widget.pack(side=tk.LEFT)
+            # Store reference to label widget for style changes
+            setattr(vv, name + '_label', label_widget)
+            # Add tooltip if formula exists
+            if name in self.m_inf.timing_formulas:
+                tooltip_text = self.m_inf.timing_formulas[name]
+                # Add JEDEC validation info to tooltip during update
+                ToolTip(label_widget, tooltip_text)
+        
         # Main timings section
         timings_frame = ttk.LabelFrame(main_frame, text="Timings", style='Section.TLabelframe')
         timings_frame.pack(fill=tk.BOTH, expand=True, pady=5)
@@ -441,10 +458,7 @@ class WindowMemory():
                 if name == 'RTL':
                     _wn = 3
                     _wv = 12
-                frame = ttk.Frame(col)
-                frame.pack(fill=tk.X, pady=1)
-                ttk.Label(frame, text=name, style='fixT.TLabel', width=_wn, anchor=tk.W).pack(side=tk.LEFT)
-                ttk.Label(frame, textvariable=var, style='fixV.TLabel', width=_wv, anchor='center').pack(side=tk.LEFT)
+                draw_timing_label_and_value(col, name, var, _wn, _wv)
 
         col_timings = [
             ( "__combobox", "" ),
@@ -516,10 +530,7 @@ class WindowMemory():
                     setattr(vv, name, var)
                 _wn = wn
                 _wv = wv
-                frame = ttk.Frame(col)
-                frame.pack(fill=tk.X, pady=1)
-                ttk.Label(frame, text=name, style='fixT.TLabel', width=_wn, anchor=tk.W).pack(side=tk.LEFT)
-                ttk.Label(frame, textvariable=var,  style='fixV.TLabel', width=_wv, anchor='center').pack(side=tk.LEFT)
+                draw_timing_label_and_value(col, name, var, _wn, _wv)
 
         adv_timings = [
             ( "tRDRD_sg", '??' ),

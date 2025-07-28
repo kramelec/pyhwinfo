@@ -256,3 +256,581 @@ JEDEC Standards:
 Press ESC or click Close to return to the main application.
 """
 
+# ===============================================================================================
+
+m_inf = types.SimpleNamespace()
+
+# DDR5 OPTIMAL CONFIGURATION GUIDE (6000-9000 MT/s)
+# Based on extensive overclocking research and DDR5 electrical design
+m_inf.ddr5_optimal_guide = """
+DDR5 OPTIMAL TIMING CONFIGURATION (6000-9000 MT/s)
+
+CORE TIMINGS (Hynix 3GB ICs & Micron 3/4GB):
+- tRRD_S: 8 tCK    (NEVER lower - ruins parallelization)
+- tRRD_L: 12 tCK   (Perfect for IC density & roundtrip)
+- tWTR_S: 4 tCK    (Half of tRRD_S, optimal burst alignment)
+- tWTR_L: 24 tCK   (Perfect, may tune to 18 or 12+3/4 in special cases)
+- tFAW: 32 tCK     (OPTIMAL for DDR5 UDIMM 1KB pagesize - NEVER lower!)
+
+Z890 SPECIFIC OPTIMIZATIONS:
+- WTR 3-18 on CCDLWR 48 works well
+- WTR 4-16 on CCDLWR 32 works well  
+- WTR 4-20 on CCDLWR 48 also works
+- Better CCDL_WR control available
+
+CRITICAL RULES:
+- Trust UEFI/BIOS for RDWR/WRRD calculations (complex PHY-dependent)
+- Keep RDPRE/PDEN, WRPRE/DEN, DR/DD on AUTO
+- All depend on CAS/CWL/Dec-Add_tCWL mix & Board Layout
+- 2DPC has higher minimums than 1DPC
+
+ELECTRICAL DESIGN FACTS:
+- tFAW "4 activates in window" is LEGACY (obsolete in DDR5)
+- DDR5 dual subchannel eliminates traditional constraints
+- Parallelization is key - don't sacrifice for visually lower numbers!
+"""
+
+# JEDEC DDR5 timing specifications for validation (JESD79-5C)
+# All timing values in nanoseconds, based on JEDEC Standard No. 79-5
+m_inf.jedec_timings = {
+    # DDR5 Speed Grade Specifications (JEDEC Standard No. 79-5)
+    3200: {
+        'tCK_avg': 0.625, 'tAA_min': 13.75, 'tRCD_min': 13.75, 'tRP_min': 13.75, 
+        'tRAS_min': 32.0, 'tWR_min': 30.0, 'tRTP_min': 7.5, 'tFAW_min': 25.0, 
+        'tRRD_L_min': 5.0, 'tRRD_S_min': 2.5, 'tWTR_L_min': 10.0, 'tWTR_S_min': 2.5,
+        'tRFC_min': 295.0, 'tRFC2_min': 160.0, 'tRFCpb_min': 90.0
+    },
+    3600: {
+        'tCK_avg': 0.555, 'tAA_min': 13.75, 'tRCD_min': 13.75, 'tRP_min': 13.75, 
+        'tRAS_min': 32.0, 'tWR_min': 30.0, 'tRTP_min': 7.5, 'tFAW_min': 22.2, 
+        'tRRD_L_min': 5.0, 'tRRD_S_min': 2.5, 'tWTR_L_min': 10.0, 'tWTR_S_min': 2.5,
+        'tRFC_min': 295.0, 'tRFC2_min': 160.0, 'tRFCpb_min': 90.0
+    },
+    4000: {
+        'tCK_avg': 0.500, 'tAA_min': 13.75, 'tRCD_min': 13.75, 'tRP_min': 13.75, 
+        'tRAS_min': 32.0, 'tWR_min': 30.0, 'tRTP_min': 7.5, 'tFAW_min': 20.0, 
+        'tRRD_L_min': 5.0, 'tRRD_S_min': 2.5, 'tWTR_L_min': 10.0, 'tWTR_S_min': 2.5,
+        'tRFC_min': 295.0, 'tRFC2_min': 160.0, 'tRFCpb_min': 90.0
+    },
+    4400: {
+        'tCK_avg': 0.454, 'tAA_min': 13.75, 'tRCD_min': 13.75, 'tRP_min': 13.75, 
+        'tRAS_min': 32.0, 'tWR_min': 30.0, 'tRTP_min': 7.5, 'tFAW_min': 18.16, 
+        'tRRD_L_min': 5.0, 'tRRD_S_min': 2.5, 'tWTR_L_min': 10.0, 'tWTR_S_min': 2.5,
+        'tRFC_min': 295.0, 'tRFC2_min': 160.0, 'tRFCpb_min': 90.0
+    },
+    4800: {
+        'tCK_avg': 0.416, 'tAA_min': 13.75, 'tRCD_min': 13.75, 'tRP_min': 13.75, 
+        'tRAS_min': 32.0, 'tWR_min': 30.0, 'tRTP_min': 7.5, 'tFAW_min': 16.64, 
+        'tRRD_L_min': 5.0, 'tRRD_S_min': 2.5, 'tWTR_L_min': 10.0, 'tWTR_S_min': 2.5,
+        'tRFC_min': 295.0, 'tRFC2_min': 160.0, 'tRFCpb_min': 90.0
+    },
+    5200: {
+        'tCK_avg': 0.384, 'tAA_min': 13.75, 'tRCD_min': 13.75, 'tRP_min': 13.75, 
+        'tRAS_min': 32.0, 'tWR_min': 30.0, 'tRTP_min': 7.5, 'tFAW_min': 15.36, 
+        'tRRD_L_min': 5.0, 'tRRD_S_min': 2.5, 'tWTR_L_min': 10.0, 'tWTR_S_min': 2.5,
+        'tRFC_min': 295.0, 'tRFC2_min': 160.0, 'tRFCpb_min': 90.0
+    },
+    5600: {
+        'tCK_avg': 0.357, 'tAA_min': 13.75, 'tRCD_min': 13.75, 'tRP_min': 13.75, 
+        'tRAS_min': 32.0, 'tWR_min': 30.0, 'tRTP_min': 7.5, 'tFAW_min': 14.28, 
+        'tRRD_L_min': 5.0, 'tRRD_S_min': 2.5, 'tWTR_L_min': 10.0, 'tWTR_S_min': 2.5,
+        'tRFC_min': 295.0, 'tRFC2_min': 160.0, 'tRFCpb_min': 90.0
+    },
+    6000: {
+        'tCK_avg': 0.333, 'tAA_min': 13.75, 'tRCD_min': 13.75, 'tRP_min': 13.75, 
+        'tRAS_min': 32.0, 'tWR_min': 30.0, 'tRTP_min': 7.5, 'tFAW_min': 13.32, 
+        'tRRD_L_min': 5.0, 'tRRD_S_min': 2.5, 'tWTR_L_min': 10.0, 'tWTR_S_min': 2.5,
+        'tRFC_min': 295.0, 'tRFC2_min': 160.0, 'tRFCpb_min': 90.0
+    },
+    6400: {
+        'tCK_avg': 0.312, 'tAA_min': 13.75, 'tRCD_min': 13.75, 'tRP_min': 13.75, 
+        'tRAS_min': 32.0, 'tWR_min': 30.0, 'tRTP_min': 7.5, 'tFAW_min': 12.48, 
+        'tRRD_L_min': 5.0, 'tRRD_S_min': 2.5, 'tWTR_L_min': 10.0, 'tWTR_S_min': 2.5,
+        'tRFC_min': 295.0, 'tRFC2_min': 160.0, 'tRFCpb_min': 90.0
+    },
+    # Extended speeds for overclocking validation
+    7200: {
+        'tCK_avg': 0.277, 'tAA_min': 13.75, 'tRCD_min': 13.75, 'tRP_min': 13.75, 
+        'tRAS_min': 32.0, 'tWR_min': 30.0, 'tRTP_min': 7.5, 'tFAW_min': 11.08, 
+        'tRRD_L_min': 5.0, 'tRRD_S_min': 2.5, 'tWTR_L_min': 10.0, 'tWTR_S_min': 2.5,
+        'tRFC_min': 295.0, 'tRFC2_min': 160.0, 'tRFCpb_min': 90.0
+    },
+    8000: {
+        'tCK_avg': 0.250, 'tAA_min': 13.75, 'tRCD_min': 13.75, 'tRP_min': 13.75, 
+        'tRAS_min': 32.0, 'tWR_min': 30.0, 'tRTP_min': 7.5, 'tFAW_min': 10.0, 
+        'tRRD_L_min': 5.0, 'tRRD_S_min': 2.5, 'tWTR_L_min': 10.0, 'tWTR_S_min': 2.5,
+        'tRFC_min': 295.0, 'tRFC2_min': 160.0, 'tRFCpb_min': 90.0
+    }
+}
+        
+# DDR5 MR13 OP[3:0] - Mode Register 13 Operating Parameters
+# Maps MR13 values to timing parameters and data rate ranges
+m_inf.mr13_timing_table = {
+    0 : {'tCCD_L': 8,  'tCCD_L_WR': 16, 'tCCD_L_WR2': 32, 'tDDLK': 1024, 'data_rate_range': (1980, 3200), 'description': '1980 MT/s ≤ data rate ≤ 2100 MT/s and 2933 MT/s ≤ data rate ≤ 3200 MT/s'},
+    1 : {'tCCD_L': 9,  'tCCD_L_WR': 18, 'tCCD_L_WR2': 36, 'tDDLK': 1024, 'data_rate_range': (3200, 3600), 'description': '3200 MT/s < data rate ≤ 3600 MT/s'},
+    2 : {'tCCD_L': 10, 'tCCD_L_WR': 20, 'tCCD_L_WR2': 40, 'tDDLK': 1280, 'data_rate_range': (3600, 4000), 'description': '3600 MT/s < data rate ≤ 4000 MT/s'},
+    3 : {'tCCD_L': 11, 'tCCD_L_WR': 22, 'tCCD_L_WR2': 44, 'tDDLK': 1280, 'data_rate_range': (4000, 4400), 'description': '4000 MT/s < data rate ≤ 4400 MT/s'},
+    4 : {'tCCD_L': 12, 'tCCD_L_WR': 24, 'tCCD_L_WR2': 48, 'tDDLK': 1536, 'data_rate_range': (4400, 4800), 'description': '4400 MT/s < data rate ≤ 4800 MT/s'},
+    5 : {'tCCD_L': 13, 'tCCD_L_WR': 26, 'tCCD_L_WR2': 52, 'tDDLK': 1536, 'data_rate_range': (4800, 5200), 'description': '4800 MT/s < data rate ≤ 5200 MT/s'},
+    6 : {'tCCD_L': 14, 'tCCD_L_WR': 28, 'tCCD_L_WR2': 56, 'tDDLK': 1792, 'data_rate_range': (5200, 5600), 'description': '5200 MT/s < data rate ≤ 5600 MT/s'},
+    7 : {'tCCD_L': 15, 'tCCD_L_WR': 30, 'tCCD_L_WR2': 60, 'tDDLK': 1792, 'data_rate_range': (5600, 6000), 'description': '5600 MT/s < data rate ≤ 6000 MT/s'},
+    8 : {'tCCD_L': 16, 'tCCD_L_WR': 32, 'tCCD_L_WR2': 64, 'tDDLK': 2048, 'data_rate_range': (6000, 6400), 'description': '6000 MT/s < data rate ≤ 6400 MT/s'},
+    9 : {'tCCD_L': 17, 'tCCD_L_WR': 34, 'tCCD_L_WR2': 68, 'tDDLK': 2048, 'data_rate_range': (6400, 6800), 'description': '6400 MT/s ≤ Data Rate ≤ 6800 MT/s'},
+    10: {'tCCD_L': 18, 'tCCD_L_WR': 36, 'tCCD_L_WR2': 72, 'tDDLK': 2304, 'data_rate_range': (6800, 7200), 'description': '6800 MT/s ≤ Data Rate ≤ 7200 MT/s'},
+    11: {'tCCD_L': 19, 'tCCD_L_WR': 38, 'tCCD_L_WR2': 76, 'tDDLK': 2304, 'data_rate_range': (7200, 7600), 'description': '7200 MT/s ≤ Data Rate ≤ 7600 MT/s'},
+    12: {'tCCD_L': 20, 'tCCD_L_WR': 40, 'tCCD_L_WR2': 80, 'tDDLK': 2560, 'data_rate_range': (7600, 8000), 'description': '7600 MT/s ≤ Data Rate ≤ 8000 MT/s'},
+    13: {'tCCD_L': 21, 'tCCD_L_WR': 42, 'tCCD_L_WR2': 84, 'tDDLK': 2560, 'data_rate_range': (8000, 8400), 'description': '8000 MT/s ≤ Data Rate ≤ 8400 MT/s'},
+    14: {'tCCD_L': 22, 'tCCD_L_WR': 44, 'tCCD_L_WR2': 88, 'tDDLK': 2816, 'data_rate_range': (8400, 8800), 'description': '8400 MT/s ≤ Data Rate ≤ 8800 MT/s'},
+    15: {'reserved': True, 'description': 'Reserved'}
+}
+        
+# RECOMMENDED OPTIMAL VALUES (Hynix 3GB ICs & Micron 3/4GB)
+# Perfect for 6000-9000 MT/s range - mature ICs may achieve 9400 MT/s!
+m_inf._optimal_values = {
+    'tFAW': 32,      # NEVER lower - ruins parallelization
+    'tRRD_S': 8,     # Architectural minimum for DDR5 dual subchannel
+    'tRRD_L': 12,    # Perfect for IC density & roundtrip timing
+    'tWTR_S': 4,     # Exactly half of tRRD_S
+    'tWTR_L': 24,    # Perfect, may tune to 18 or 12+3/4 in special cases
+    'tWR': 30,       # Standard for DDR5
+    'tRTP': 15,      # Read to precharge timing
+    #  formulas
+    'tRAS_formula': 'tRCD + tRTP + 8',     #  formula
+    'tRC_formula': 'tRP + tRCD',           # JEDEC/Intel standard  
+    'tRASmax_formula': 'tRP + CAS + tRCD', # Maximum active time
+    # Advanced turnarounds
+    'tRDRD_sg': 16,  # Read to Read same bank group
+    'tWRWR_sg': 12,  # Write to Write same bank group
+}
+        
+# Clean, coherent timing formulas with  insights
+m_inf.timing_formulas = {
+    # ===== PRIMARY TIMINGS =====
+    'tCL': """
+CAS Latency (Column Address Strobe)
+JEDEC: Command to data output delay
+Formula: nCK = ceiling((tAA_min / tCK_avg) - 0.01)
+Min: 22 tCK (DDR5-4800), typically 32-46 for performance kits
+
+Higher CL allows tighter subtimings for better overall performance
+""",
+    'tRCD': """
+RAS to CAS Delay (Row Command Delay)
+JEDEC: Row activate to column command delay
+Formula: nCK = ceiling((tRCD_min / tCK_avg) - 0.01)
+Min: 22 tCK (DDR5-4800)
+
+Formula: tRAS = tRCD + tRTP + 8
+Perfect for Hynix 3GB ICs & Micron 3/4GB (6000-9000 MT/s)
+""",
+    'tRCDW': """
+RAS to CAS Delay for Write
+JEDEC: Separate timing for write operations
+Usually same as tRCD unless specifically optimized
+""",
+    'tRP': """
+Row Precharge Time
+JEDEC: Precharge to activate delay
+Formula: nCK = ceiling((tRP_min / tCK_avg) - 0.01)
+Min: 22 tCK (DDR5-4800)
+
+Formula: tRC = tRP + tRCD (JEDEC standard)
+""",
+    'tRAS': """
+Row Active Time
+JEDEC: Minimum time row must remain active
+Formula: nCK = ceiling((tRAS_min / tCK_avg) - 0.01)
+Min: 52 tCK (DDR5-4800)
+
+Formula: tRAS = tRCD + tRTP + 8
+Perfect for Hynix 3GB ICs & Micron 3/4GB (6000-9000 MT/s)
+Ensures data retention during access
+""",
+    'tRC': """
+Row Cycle Time (Complete Row Operation)
+JEDEC/Intel: Total row cycle time
+Standard: tRC = tRAS + tRP
+
+Formula: tRC = tRP + tRCD
+Should equal calculated value for optimal performance
+""",
+    # ===== WRITE TIMINGS =====
+    'tWR': """
+Write Recovery Time
+JEDEC: Write to precharge delay
+Formula: nCK = ceiling((tWR_min / tCK_avg) - 0.01)
+Min: 30 tCK (DDR5-4800)
+
+ OPTIMAL: tWR = 30 tCK
+Perfect for Hynix 3GB ICs & Micron 3/4GB (6000-9000 MT/s)
+""",
+    'tCWL': """
+CAS Write Latency
+JEDEC: Write command to data timing
+Formula: nCK = ceiling((tCWL_min / tCK_avg) - 0.01)
+Typically: tCWL = tCL - 2
+
+Used in Intel BIOS turnaround calculations
+""",
+    # ===== BANK GROUP TIMINGS =====
+    'tFAW': """
+Four Activate Window -
+
+LEGACY ALERT: "4 activates in window" is OBSOLETE in DDR5!
+DDR5 dual subchannel eliminates traditional 4-activate constraints
+
+ OPTIMAL: tFAW = 32 tCK (NEVER LOWER!)
+Perfect for DDR5 UDIMM 1KB pagesize electrical design
+Hynix 3GB ICs & Micron 3/4GB - 6000-9000 MT/s
+
+CRITICAL: Lowering below 32 completely ruins parallelization
+- Destroys DDR5's architectural benefits
+- Halves PHY work on CPU side  
+- Creates barely utilized burst length
+- Visually lower timings but worse performance
+
+DDR5 SUBCHANNEL REVOLUTION:
+- 4 writes across 4 subchannels within BL16
+- Zero relation to BurstChop8
+- ForthACT Window timing is DEAD
+- Physical design moved on, CPU PHY interleaving matured
+
+JEDEC Formula: nCK = ceiling((tFAW_min / tCK_avg) - 0.01)
+""",
+    'tRRD_S': """
+Row to Row Delay (Short) - Different Bank Group
+
+ OPTIMAL: tRRD_S = 8 tCK (NEVER LOWER!)
+Architectural minimum for DDR5 dual subchannel
+Perfect for Hynix 3GB ICs & Micron 3/4GB
+
+CRITICAL: Never below 8 tCK - destroys DDR5 parallelization
+JEDEC Min: 8 tCK or 2.5ns
+Formula: nCK = max(8, ceiling((tRRD_S_min / tCK_avg) - 0.01))
+""",
+    'tRRD_L': """
+Row to Row Delay (Long) - Same Bank Group
+
+ OPTIMAL: tRRD_L = 12 tCK
+Perfect for IC density & roundtrip timing  
+Hynix 3GB ICs & Micron 3/4GB - 6000-9000 MT/s
+Mature ICs may achieve 9400 MT/s with 8-12-4-24
+
+JEDEC Min: 8 tCK or 5.0ns
+Fine till ~7600 MT/s: tRRD 8-8 acceptable, 8-10 fully fine
+Formula: nCK = max(8, ceiling((tRRD_L_min / tCK_avg) - 0.01))
+""",
+    'tWTR_S': """
+Write to Read Turnaround (Short) - Different Bank Group
+
+ OPTIMAL: tWTR_S = 4 tCK
+Exactly half of tRRD_S (optimal burst alignment)
+Perfect for Hynix 3GB ICs & Micron 3/4GB
+
+DDR5 WRITE BEHAVIOR:
+- Dynamic scheduling capability
+- Can be 6, 7, or 12 tCK but optimally half of tRRD_S
+- SubChannel design allows burst 3 timing
+- Effects of scheduling smaller - 2nd subchannel/DIMM free
+
+JEDEC Min: 4 tCK or 2.5ns
+Formula: nCK = max(4, ceiling((tWTR_S_min / tCK_avg) - 0.01))
+""",
+    'tWTR_L': """
+Write to Read Turnaround (Long) - Same Bank Group
+
+ OPTIMAL: tWTR_L = 24 tCK
+Perfect for Hynix 3GB ICs & Micron 3/4GB
+Special tuning may allow 18 or even 12+3/4 tCK
+At extreme ranges, parallelization breaks & averages worsen!
+
+- Writes DON'T follow BurstChop8 (per subchannel individually)
+- Sequential: 4+8+break, 4+8+break pattern
+- Non-delayed writes to 4 DIMM places
+- 4 writes across 4 subchannels within BL16
+- Zero relation to BurstChop - separated but read-aligned
+
+JEDEC Min: 16 tCK or 10ns
+Formula: nCK = max(16, ceiling((tWTR_L_min / tCK_avg) - 0.01))
+Intel BIOS: tWTR_L = tWRRD_sg - tCWL - BurstLength - 2
+""",
+    'tRTP': """
+Read to Precharge
+JEDEC: Internal read to precharge delay
+Formula: nCK = max(12, ceiling((tRTP_min / tCK_avg) - 0.01))
+
+ OPTIMAL: tRTP = 15 tCK  
+Used in  tRAS formula: tRAS = tRCD + tRTP + 8
+
+JEDEC Min: 12 tCK or 7.5ns
+""",
+    # ===== REFRESH TIMINGS =====
+   'tRFC': """
+Refresh Cycle Time
+JEDEC: the delay from when a refresh starts to when it finishes for any bank group and is triggered by tREFI or when DIMM temp is > 85C by tREFI/2.
+
+| Parameter | 8Gb | 16Gb | 24Gb | 32Gb | Units |
+| RFC1,min  | 195 | 295 | 410   | 410  |   ns  |
+Critical for stability and data retention
+""",
+    'tRFC2': """
+Fine Granularity Refresh
+JEDEC: Used when Fine Granularity Refresh (FGR) mode is enabled and is then triggred by tREFI/2 or when DIMM temp is > 85C by tREFI/4. A Bios may use this value to set tRFC automatically
+|  Parameter   | 8Gb | 16Gb | 24Gb | 32Gb | Units |
+|  RFC2,min    | 130 | 160  | 220   | 220  |  ns  |
+e.g.(
+24Gb 8000 MT/s = 4000Mhz = 4000000000Hz = 0.25ns per clock cycle
+tRFC2,min = 220ns / 0.25ns = 880 clock cycles
+Test in % values of the 220ns such as 80% * 220 = 176ns / 0.25ns = 704 clock cycles.)
+""",
+    'tRFCpb': """
+Refresh Cycle Time per Bank
+JEDEC:  delay from when a refresh starts to when it finishes for a single bank group. It enables other bank groups to be used for other operations while one refreshes and is allowed only when Fine granularity Refresh mode is enabled. tRFCpb is shorter than tRFC as its uses an shorter refresh interval of tREFI/(2*n) where the maximum average refresh interval is further divided down by "n" number of banks in a bank group and thus requires less time to charge a cell to it's nominal value as refreshes occur more frequently
+|  Parameter   | 8Gb | 16Gb | 24Gb | 32Gb | Units |
+|  RFCsb,min   | 115 | 130  | 190  | 190  |  ns   |
+e.g.(
+24Gb 8000 MT/s = 4000Mhz = 4000000000Hz = 0.25ns per clock cycle
+tRFCsb,min = 190ns / 0.25ns = 760 clock cycles
+Test in % values of the 220ns such as 80% * 190 = 152ns / 0.25ns = 608 clock cycles.)
+""",
+    'tXSR': """
+Exit Self Refresh
+JEDEC: Formula: tXSR ≥ max(tRFC + 10ns, 200 tCK)
+tRFC for DDR5.
+| Parameter | 8Gb | 16Gb | 24Gb | 32Gb | Units |
+| RFC1,min  | 195 | 295  | 410   | 410 |  ns   |
+e.g.(
+24Gb 8000MT/s = 4000Mhz = 4000000000Hz = 0.25ns per clock cycle
+tRFC1,min = 410ns / 0.25ns = 1640 clock cycles
+Test in % values of the 410ns such as 80% * 410 = 328ns / 0.25ns = 1312 clock cycles.)
+""",
+    'tREFI': """
+Average Refresh Interval
+JEDEC: Time between refresh commands
+Standard: 7.8μs (1x), Extended: 3.9μs (2x)
+DANGER: Raising this too far without proper cooling will cause data loss!
+Typical values: SAFE: 32767, 
+            Aggressive: 65535,
+            Extreme 131071,
+            Max: 262143 (Only for extreme cooling setups)
+""",
+    'tREFIx9': """
+9x Refresh Interval
+JEDEC: Extended refresh interval for power saving.
+Typically: 255
+""",
+    'tREFSBRD': """
+Refresh to Same Bank Read
+JEDEC: Ensures data stability after refresh
+""",
+    # ===== TURNAROUND TIMINGS =====
+    'tRDRD_sg': """
+Read to Read (Same Bank Group)
+Intel timing: Consecutive read performance
+
+OPTIMAL: tRDRD_sg = 16 tCK
+Perfect for Hynix 3GB ICs & Micron 3/4GB
+""",
+    'tWRWR_sg': """
+Write to Write (Same Bank Group)
+Intel timing: Burst write optimization
+
+OPTIMAL: tWRWR_sg = 12 tCK
+Perfect for Hynix 3GB ICs & Micron 3/4GB
+""",
+    'tRDWR_sg': """
+Read to Write (Same Bank Group)
+Intel timing: Includes data bus turnaround
+Complex PHY-dependent - trust UEFI/BIOS values!
+""",
+    'tWRRD_sg': """
+Write to Read (Same Bank Group)
+Intel BIOS: tWRRD_sg = tCWL + BurstLength + tWTR_L + 2
+Used in tWTR_L calculation
+""",
+    'tRDRD_dg': """
+Read to Read (Different Bank Group)
+Intel timing: Faster than same bank group
+Takes advantage of bank group independence
+""",
+    'tWRWR_dg': """
+Write to Write (Different Bank Group)
+Intel timing: Optimized write performance
+""",
+    'tRDWR_dg': """
+Read to Write (Different Bank Group)
+Intel timing: Lower latency than same bank group
+""",
+    'tWRRD_dg': """
+Write to Read (Different Bank Group)
+Intel BIOS: tWRRD_dg = tCWL + BurstLength + tWTR_S + 2
+Used in tWTR_S calculation
+""",
+    # ===== RANK/DIMM TIMINGS =====
+    'tRDRD_dr': """
+Read to Read (Same DIMM)
+Intel timing: Rank-to-rank delay with switching overhead
+""",
+    'tRDWR_dr': """
+Read to Write (Same DIMM)
+Intel timing: Includes rank switching
+""",
+    'tWRRD_dr': """
+Write to Read (Same DIMM)
+Intel timing: Accounts for ODT switching
+""",
+    'tWRWR_dr': """
+Write to Write (Same DIMM)
+Intel timing: Multi-rank write optimization
+""",
+    'tRDRD_dd': """
+Read to Read (Different DIMM)
+Intel timing: Highest turnaround penalty
+""",
+    'tRDWR_dd': """
+Read to Write (Different DIMM)
+Intel timing: Cross-DIMM with channel switching
+""",
+    'tWRRD_dd': """
+Write to Read (Different DIMM)
+Intel timing: Maximum turnaround delay
+""",
+    'tWRWR_dd': """
+Write to Write (Different DIMM)
+Intel timing: Dual-DIMM system optimization
+""",
+    # ===== POWER & ADVANCED =====
+    'tCKE': """
+Clock Enable Time
+JEDEC: Min 8 tCK - power state transition
+""",
+    'tXP': """
+Exit Precharge Power Down
+JEDEC: Formula: tXP ≥ max(8 tCK, 7.5ns)
+""",
+    'tXPDLL': """
+Exit Precharge Power Down (DLL)
+JEDEC: Power down exit with DLL relock
+""",
+    'tXSDLL': """
+Exit Self Refresh (DLL)
+JEDEC: Self refresh exit with DLL relock
+""",
+    'RTL': """
+Round Trip Latency
+Intel: Total read latency (RTL0/RTL1/RTL2/RTL3)
+Critical for read timing optimization
+""",
+    # ===== PRECHARGE & POWER =====
+    'tRDPRE': """
+Read to Precharge
+JEDEC: Ensures read data valid before precharge
+""",
+    'tRDPDEN': """
+Read to Power Down Entry
+JEDEC: Power management optimization
+""",
+    'tWRPRE': """
+Write to Precharge
+Intel BIOS: tWRPRE = tCWL + BurstLength + tWR
+""",
+    'tWRPDEN': """
+Write to Power Down Entry
+Intel BIOS: May use alternative tWR calculation
+""",
+    'tWTP': """
+Write to Precharge (Internal)
+JEDEC: Usually calculated from other timings
+""",
+    'tPRPDEN': """
+Precharge to Power Down Entry
+JEDEC: Power state transition timing
+""",
+    'tCPDED': """
+Command Pass Disable Delay
+JEDEC: Internal timing optimization
+""",
+    'tPPD': """
+Power Down Delay
+JEDEC: Power management timing
+""",
+    # ===== SPECIAL/UNDOCUMENTED =====
+    'tCR': """
+Command Rate
+1N = commands every clock, 2N = every 2 clocks
+Affects overall memory bandwidth
+""",
+    'DEC_tCWL': """
+Decrease tCWL (Intel Internal)
+Used in alternative tWTR calculations
+""",
+    'ADD_tCWL': """
+Add to tCWL (Intel Internal)  
+Used in alternative tWTR calculations
+""",
+    'tZQOPER': """
+ZQ Calibration Time
+JEDEC: Typical 512 tCK - signal integrity
+""",
+    'tMOD': """
+Mode Register Set Time
+JEDEC: Min 24 tCK after MRS commands
+""",
+    'tCSL': """
+Chip Select Low Time
+JEDEC: Min 1 tCK
+""",
+    'tCSH': """
+Chip Select High Time
+JEDEC: Min 1 tCK
+""",
+    'tRFM': """
+Refresh Management
+JEDEC: Refresh control timing
+""",
+    'oref_ri': """
+Refresh Interval Override
+Intel: Overrides standard refresh timing
+""",
+    'X8_DEVICE': """
+x8 Device Configuration
+JEDEC: Device width setting
+""",
+    'N_TO_1_RATIO': """
+N:1 Gear Ratio
+Intel: Gear mode configuration
+""",
+    'ADD_1QCLK_DELAY': """
+Add 1 QCLK Delay
+Intel: Additional clock delay
+""",
+    # =====  SUMMARY =====
+    '_SUMMARY': """
+ OPTIMAL VALUES (6000-9000 MT/s)
+Hynix 3GB ICs & Micron 3/4GB - PERFECT configuration:
+
+CORE TIMINGS:
+- tFAW: 32 tCK     (NEVER lower - ruins parallelization!)
+- tRRD_S: 8 tCK    (Architectural minimum)  
+- tRRD_L: 12 tCK   (Perfect for IC density)
+- tWTR_S: 4 tCK    (Half of tRRD_S)
+- tWTR_L: 24 tCK   (Perfect, may tune to 18)
+- tWR: 30 tCK      (Standard)
+- tRTP: 15 tCK     ( recommended)
+
+CALCULATED FORMULAS:
+- tRAS = tRCD + tRTP + 8     ( formula)
+- tRC = tRP + tRCD           (JEDEC standard)
+- tRASmax = tRP + CAS + tRCD (Maximum active)
+
+ADVANCED TURNAROUNDS:
+- tRDRD_sg: 16 tCK  (Same bank group reads)
+- tWRWR_sg: 12 tCK  (Same bank group writes)
+
+Mature ICs may achieve 9400 MT/s with 8-12-4-24!
+At 4nCK speeds, L3 cache becomes bottleneck (90% cache fills)
+Board tuning & thermal design matter for extreme overclocking
+"""
+}
+
+
