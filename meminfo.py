@@ -9,7 +9,11 @@ import math
 
 import tkinter as tk
 from tkinter import ttk
-from tkextrafont import load_extrafont
+try:
+    from tkextrafont import load_extrafont
+except ImportError:
+    def load_extrafont(root):
+        pass  # Fallback if tkextrafont is not available
 
 from hardware import *
 from jep106 import *
@@ -94,7 +98,10 @@ class WindowMemory():
         self.mem_info = None
         
     def init_styles(self):
-        self.root.load_font("styles/IntelOneMono-Medium.ttf")
+        try:
+            self.root.load_font("styles/IntelOneMono-Medium.ttf")
+        except:
+            pass  # Continue if font loading fails
         style = ttk.Style()
         style.configure('Title.TLabel', font=('Segoe UI', 10))
         style.configure("TRadiobutton", font=('Segoe UI', 10))
