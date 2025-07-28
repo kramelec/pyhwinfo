@@ -21,6 +21,7 @@ from memory import *
 
 import mem_helpers
 from mem_helpers import *
+from mlc_tool import MLCTool, MLCDialog
 
 __author__ = 'remittor'
 
@@ -107,6 +108,8 @@ class WindowMemory():
         self.mem_info = None
         self.advanced_tooltip = AdvancedTooltip(self.root)
         self.m_inf = mem_helpers.m_inf
+        self.mlc_tool = MLCTool(self.root)
+        self.mlc_dialog = None
         
     def init_styles(self):
         try:
@@ -639,6 +642,16 @@ class WindowMemory():
         btn_dump = ttk.Button(btn_frame, text="Save to file", command = self.button_click_dump)
         btn_dump.pack(side=tk.LEFT)
 
+        # Add MLC button
+        btn_mlc = ttk.Button(btn_frame, text="MLC Latency Test", command = self.button_click_mlc)
+        btn_mlc.pack(side=tk.LEFT, padx=(10, 0))
+        
+        # Add tooltip for MLC button
+        ToolTip(btn_mlc, "Run Intel Memory Latency Checker (MLC) to measure:\n"
+                        "• DDR5 DRAM idle latency (nanoseconds)\n"
+                        "• Memory bandwidth (MB/s)\n"
+                        "Requires mlc.exe to be available or browseable.")
+
         btn_refresh = ttk.Button(btn_frame, text="Refresh", command = self.button_click_refresh)
         btn_refresh.pack(side=tk.RIGHT)
 
@@ -957,6 +970,13 @@ class WindowMemory():
         with open(fn, 'w') as file:
             json.dump(self.mem_info, file, indent = 4)
         print(f'File "{fn}" created')
+
+    def button_click_mlc(self):
+        """Handle MLC button click - show MLC measurement dialog"""
+        print("MLC Latency Test button clicked!")
+        if not self.mlc_dialog:
+            self.mlc_dialog = MLCDialog(self.root, self.mlc_tool)
+        self.mlc_dialog.show_dialog()
 
 if __name__ == "__main__":
     test = False
