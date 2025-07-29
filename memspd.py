@@ -413,10 +413,13 @@ def find_spd_smbus(check_pci_did = True):
                     print(f'WARN: wrong SMBus addr = 0x{smbus_addr:X}  ({bus:02X}:{dev:02X}:{fun:02X}  VID = 0x{vid:04X}  DID = 0x{did:04X})')
                     continue  # incorret value
                 smb_addr = smbus_addr - 1
-                slot = 0
-                vendorid = mem_spd_read_reg(slot, SPD5_MR3, 2)  # MR3 + MR4 => Vendor ID
+                vendorid = None
+                for slot in range(0, 4):
+                    vendorid = mem_spd_read_reg(slot, SPD5_MR3, 2)  # MR3 + MR4 => Vendor ID
+                    if vendorid is not None and vendorid > 0:
+                        break
                 if not vendorid:
-                    print(f'WARN: wrong SMBus addr = 0x{smbus_addr:X}  Reason: VendorID = NULL')
+                    print(f'WARN: wrong SMBus addr = 0x{smbus_addr:X}  Reason: VendorID = {vendorid}')
                     continue  # Cannot read VendorID from SPD
                 return smb_list[snum]
     finally:
