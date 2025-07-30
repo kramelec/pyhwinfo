@@ -12,6 +12,7 @@ from tkinter import ttk
 try:
     from tkextrafont import load_extrafont
 except ImportError:
+    print('Module "tkextrafont" not found!')
     def load_extrafont(root):
         pass  # Fallback if tkextrafont is not available
 
@@ -162,11 +163,17 @@ class WindowMemory():
         cpu_label.pack(side=tk.LEFT, padx = 5, pady = 1)
         
         # Add advanced info button with info icon
-        info_btn = tk.Button(cpu_frame, text="ℹ", font=("Segoe UI", 12, "bold"), 
+        info_btn = tk.Button(cpu_frame, text="ℹ", font=("Segoe UI", 10, "bold"), 
                             bg="#4CAF50", fg="white", width=3, height=1,
                             command=self.advanced_tooltip.show_advanced_info,
                             relief=tk.RAISED, borderwidth=2, cursor="hand2")
-        info_btn.pack(side=tk.RIGHT, padx=5, pady=1)
+        info_btn.pack(side=tk.RIGHT, padx=3, pady=0)
+
+        cap_btn = tk.Button(cpu_frame, text="📷", font=("Segoe UI", 10, "bold"), 
+                            bg="#4CAF50", fg="white", width=3, height=1,
+                            command=self.take_screenshot,
+                            relief=tk.RAISED, borderwidth=2, cursor="hand2")
+        cap_btn.pack(side=tk.RIGHT, padx=3, pady=0)
         
         # Add tooltip for the info button
         ToolTip(info_btn, "Click for comprehensive DDR5 optimization guide, JEDEC validation info,\narchitectural insights, and advanced timing explanations not available\nin regular tooltips. Includes overclocking guidelines, platform-specific\noptimizations, and detailed technical references.")
@@ -957,6 +964,22 @@ class WindowMemory():
         mc_num = int(xx[0].split('#')[1].strip())
         ch_num = int(xx[1].split('#')[1].strip())
         self.update(slot_id = self.current_slot, mc_id = mc_num, ch_id = ch_num)
+
+    def take_screenshot(self):
+        import ctypes, mss, datetime
+        hWnd = ctypes.windll.user32.GetForegroundWindow()
+        if hWnd == 0:
+            return
+        rect = RECT()
+        result = ctypes.windll.user32.GetWindowRect(hWnd, ctypes.byref(rect))
+        if result != 0:
+            dt = datetime.datetime.now().strftime("%Y-%m-%d_%H%M")
+            fn = f'meminfo_{dt}.png'
+            with mss.mss() as sct:
+                monitor = { "left": rect.left, "top": rect.top, "width": rect.right - rect.left, "height": rect.bottom - rect.top }
+                screenshot = sct.grab(monitor)
+                mss.tools.to_png(screenshot.rgb, screenshot.size, output = fn)
+                print(f'Screenshot saved to file "{fn}"')
 
     def button_click_dump(self):
         from datetime import datetime
