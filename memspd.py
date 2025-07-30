@@ -20,6 +20,10 @@ from cpuidsdk64 import *
 from hardware import *
 from jep106 import *
 
+# Intel® 700 Series Chipset Family Platform Controller Hub
+# ref: vol1: https://cdrdv2-public.intel.com/743835/743835-004.pdf
+# ref: vol2: https://cdrdv2-public.intel.com/743845/743845_001.pdf
+
 LOCAL_SMBUS_MUTEX_NAME  = r"Local\Access_SMBUS.HTP.Method"
 GLOBAL_SMBUS_MUTEX_NAME = r"Global\Access_SMBUS.HTP.Method"
 
@@ -371,47 +375,96 @@ def mem_pmic_read(slot):
     
 # =================================================================================================
 
+def read_smbus_info(bus, dev, fun, full_info = True):
+    class_code = pci_cfg_read(bus, dev, fun, 0x0B, size = '1') # ref: 743845_001.pdf  section: Base Class Code (BCC)—Offset Bh
+    if class_code != 0x0C:   # Serial Bus Controller   # source: https://wiki.osdev.org/PCI
+        return None
+    subclass = pci_cfg_read(bus, dev, fun, 0x0A, size = '1') # ref: 743845_001.pdf  section: Sub Class Code (SCC)—Offset Ah
+    if subclass != 0x05:     # SMBus Controller        # source: https://wiki.osdev.org/PCI
+        return None
+    #header_type = pci_cfg_read(bus, dev, fun, 0x0E, size = '1')
+    #if header_type != 0:
+    #    return None
+    vid = pci_cfg_read(bus, dev, fun, 0, '2')   # ref: 743845_001.pdf  section: Vendor ID (VID)—Offset 0h
+    did = pci_cfg_read(bus, dev, fun, 2, '2')   # ref: 743845_001.pdf  section: Device ID (DID)—Offset 2h
+    smbus = { }
+    smbus['cfg_addr'] = [ bus, dev, fun ]
+    smbus['pch_vid'] = vid
+    smbus['pch_did'] = did
+    smbus['pch_name'] = PCI_ID_SMBUS_INTEL[did]['name'] if did and did in PCI_ID_SMBUS_INTEL else None
+    # ref: 743845_001.pdf  section: SMB Base Address (SBA)—Offset 20h
+    offset = 0x10 + 4 * 4   # BAR4 - SMBus Addr
+    smbus['port'] = pci_cfg_read(bus, dev, fun, offset, size = '4')
+    if full_info:
+        # ref: 743845_001.pdf  section: Command (CMD)—Offset 4h
+        offset = 0x4
+        CMD = pci_cfg_read(bus, dev, fun, offset, size = 2)
+        if CMD:
+            smbus['MSE']  = get_bits(CMD, 0, 1)  # Memory Space Enable (MSE): 1= Enables memory mapped config space.
+            smbus['IOSE'] = get_bits(CMD, 0, 0)  # I/O Space Enable (IOSE): 1= enables access to the SM Bus I/O space registers as defined by the Base Address Register.
+        # ref: 743845_001.pdf  section: SMBus Memory Base Address_31_0
+        offset = 0x10
+        SMBMBAR = pci_cfg_read(bus, dev, fun, offset, size = 4)
+        if SMBMBAR:
+            smbus['MSI']    = get_bits(SMBMBAR, 0, 0)     # Memory Space Indicator (MSI): Indicates that the SMB logic is memory mapped.
+            smbus['ADDRNG'] = get_bits(SMBMBAR, 0, 1, 2)  # Address Range (ADDRNG): Indicates that this SMBMBAR can be located anywhere in 64 bit address space
+            smbus['PREF']   = get_bits(SMBMBAR, 0, 3)     # Prefetchable (PREF): Hardwired to 0. Indicated that SMBMBAR is not pre- fetchable
+            smbus['HARDWIRED_0'] = get_bits(SMBMBAR, 0, 4, 7)   # Hardwired_0 (HARDWIRED_0): Hardwired to 0.
+            smbus_mem_addr = get_bits(SMBMBAR, 0, 8, 31)
+            # ref: 743845_001.pdf  section: SMBus Memory Base Address_63_32
+            smbus_mem_addr_HI = pci_cfg_read(bus, dev, fun, 0x14, size = '4')
+            if smbus_mem_addr_HI is not None:
+                smbus_mem_addr = (smbus_mem_addr_HI << 32) + (smbus_mem_addr << 8)
+                smbus['MEMIO_ADDR'] = smbus_mem_addr
+        # ref: 743845_001.pdf  section: Host Configuration (HCFG)—Offset 40h
+        offset = 0x40
+        HCFG = pci_cfg_read(bus, dev, fun, offset, size = 4)
+        if HCFG:
+            smbus['I2C_EN'] = get_bits(HCFG, 0, 2)   # I2C_EN (I2CEN): When this bit is 1, the PCH is enabled to communicate with I2C devices. This will change the formatting of some commands. When this bit is 0, behavior is for SMBus.
+    return smbus
+
 # https://github.com/memtest86plus/memtest86plus/blob/2f9b165eec4de20ec4b23725c90d3989517ee3fe/system/x86/i2c.c#L80
-def find_smb_controllers(check_pci_did = True):
+def find_smb_controllers():
     res = [ ]
     for bus in range(0, 0xFF, 0x80):
         for dev in range(0, 32):
             for fun in range(0, 8):
-                vid = pci_cfg_read(bus, dev, fun, 0, '2')
-                if not vid or vid == 0xFFFF:
-                    continue
-                if vid != PCI_VENDOR_ID_INTEL:
-                    continue
-                did = pci_cfg_read(bus, dev, fun, 2, '2')
-                if did is None or did == 0xFFFF:
-                    continue
-                if check_pci_did:
-                    if did not in PCI_ID_SMBUS_INTEL:
-                        continue
-                class_code  = pci_cfg_read(bus, dev, fun, 0x08 + 3, size = '1') # source: https://wiki.osdev.org/PCI
-                subclass    = pci_cfg_read(bus, dev, fun, 0x08 + 2, size = '1')
-                header_type = pci_cfg_read(bus, dev, fun, 0x0C + 2, size = '1')
-                if header_type != 0:
-                    continue
-                if class_code != 0x0C:   # Serial Bus Controller   # source: https://wiki.osdev.org/PCI
-                    continue
-                if subclass != 0x05:     # SMBus Controller        # source: https://wiki.osdev.org/PCI
-                    continue
-                res.append( (vid, did, bus, dev, fun, ) )
+                smb = read_smbus_info(bus, dev, fun)
+                if smb:
+                    res.append( smb )
     return res
 
 def find_spd_smbus(check_pci_did = True):
     global smb_addr
     saved_smb_addr = smb_addr
     try:
-        smb_list = find_smb_controllers(check_pci_did)
+        smb_list = find_smb_controllers()
         if smb_list:
-            for snum, (vid, did, bus, dev, fun) in enumerate(smb_list):
-                offset = 0x10 + 4 * 4   # BAR4 - SMBus Addr
-                smbus_addr = pci_cfg_read(bus, dev, fun, offset, size = '4')
+            for smb in smb_list:
+                (bus, dev, fun) = tuple(smb['cfg_addr'])
+                vid = smb['pch_vid']
+                if vid != PCI_VENDOR_ID_INTEL:
+                    continue
+                did = smb['pch_did']
+                smbus_addr = smb['port']
+                if smbus_addr is None or did is None:
+                    continue
+                print(f'Detect SMBus on [{bus:02X}:{dev:02X}:{fun:02X}] addr = 0x{smbus_addr:X}, VID = 0x{vid:04X}, DID = 0x{did:04X}')
+                print(f'INFO: SMBus MSE = {smb["MSE"]}')
+                if smb['MEMIO_ADDR']:
+                    print(f'INFO: SMBus Mem Addr = 0x{smb["MEMIO_ADDR"]:X}')
                 if (smbus_addr & 1) == 0:
-                    print(f'WARN: wrong SMBus addr = 0x{smbus_addr:X}  ({bus:02X}:{dev:02X}:{fun:02X}  VID = 0x{vid:04X}  DID = 0x{did:04X})')
+                    print(f'WARN: Wrong SMBus addr = 0x{smbus_addr:X}')
                     continue  # incorret value
+                if smb['I2C_EN'] == 1:
+                    print(f'WARN: SMBus I2C_EN = 1')
+                    continue  # incorret value
+                if smb['IOSE'] == 0: 
+                    print(f'WARN: SMBus IOSE = 0')
+                    continue  # incorret value
+                if did not in PCI_ID_SMBUS_INTEL and check_pci_did:
+                    print(f'WARN: unsupported DID = 0x{did:04X}')
+                    continue
                 smb_addr = smbus_addr - 1
                 vendorid = None
                 for slot in range(0, 4):
@@ -421,7 +474,7 @@ def find_spd_smbus(check_pci_did = True):
                 if not vendorid:
                     print(f'WARN: wrong SMBus addr = 0x{smbus_addr:X}  Reason: VendorID = {vendorid}')
                     continue  # Cannot read VendorID from SPD
-                return smb_list[snum]
+                return smb
     finally:
         smb_addr = saved_smb_addr
     return None
@@ -484,39 +537,31 @@ def get_mem_spd_info(slot, mem_info: dict, with_pmic = True):
         raise RuntimeError(f'ERROR: Processor model 0x{cpu["model_id"]:X} not supported')
 
     if not g_smbus['cfg_addr']:
-        smbus_dev = find_spd_smbus(check_pci_did = True)
-        if not smbus_dev:
+        _smb = find_spd_smbus(check_pci_did = True)
+        if not _smb:
             print('ERROR: Cannot found PCH with SMBus controller')
             return None
-        (vid, did, bus, dev, fun) = smbus_dev 
-    else:
-        vid = g_smbus['pch_vid']
-        did = g_smbus['pch_did']
-        (bus, dev, fun) = tuple(g_smbus['cfg_addr'])
+        smb = _smb
     
     if not smb_addr:
+        vid = smb['pch_vid']
         if vid == PCI_VENDOR_ID_INTEL:
+            (bus, dev, fun) = tuple(smb['cfg_addr'])
+            did = smb['pch_did']
             smbus_dev_name = PCI_ID_SMBUS_INTEL[did]['name']
             print(f'Founded PCH device with SMBus: "{smbus_dev_name}"')
-            print(f'VID = 0x{vid:04X}  DID = 0x{did:04X} >>> {bus:02X}:{dev:02X}:{fun:02X}')
+            #print(f'VID = 0x{vid:04X}  DID = 0x{did:04X} >>> {bus:02X}:{dev:02X}:{fun:02X}')
         else:
             raise RuntimeError('ERROR: Currently siupported only Intel platform')
 
+        if not smb['port']:
+            return None
+        
+        g_smbus = smb
+        smb_addr = g_smbus['port'] - 1
+        print(f'Intel PCH SMBus addr = 0x{smb_addr:X}')
         g_smbus["ddr_ver"] = g_mem_info['memory']['mc'][0]['DDR_ver']
         print(f'DDR_ver: {g_smbus["ddr_ver"]}')
-
-        offset = 0x10 + 4 * 4   # BAR4 - SMBus Addr
-        smbus_addr = pci_cfg_read(bus, dev, fun, offset, size = '4')
-        if (smbus_addr & 1) == 0:
-            raise RuntimeError(f'ERROR: Cannot detect SMBus addr!')
-        smbus_addr -= 1
-        print(f'Intel PCH SMBus addr = 0x{smbus_addr:X}')
-        smb_addr = smbus_addr
-        g_smbus['cfg_addr'] = [ bus, dev, fun ]
-        g_smbus['pch_vid'] = vid
-        g_smbus['pch_did'] = did
-        g_smbus['pch_name'] = smbus_dev_name
-        g_smbus['port'] = smb_addr
 
     vendorid = mem_spd_read_reg(slot, SPD5_MR3, 2)  # MR3 + MR4 => Vendor ID
     if not vendorid:
