@@ -434,7 +434,7 @@ def find_smb_controllers():
                     res.append( smb )
     return res
 
-def find_spd_smbus(check_pci_did = True):
+def find_spd_smbus(check_pci_did = True, check_spd = True):
     global smb_addr
     saved_smb_addr = smb_addr
     try:
@@ -465,15 +465,16 @@ def find_spd_smbus(check_pci_did = True):
                 if did not in PCI_ID_SMBUS_INTEL and check_pci_did:
                     print(f'WARN: unsupported DID = 0x{did:04X}')
                     continue
-                smb_addr = smbus_addr - 1
-                vendorid = None
-                for slot in range(0, 4):
-                    vendorid = mem_spd_read_reg(slot, SPD5_MR3, 2)  # MR3 + MR4 => Vendor ID
-                    if vendorid is not None and vendorid > 0:
-                        break
-                if not vendorid:
-                    print(f'WARN: wrong SMBus addr = 0x{smbus_addr:X}  Reason: VendorID = {vendorid}')
-                    continue  # Cannot read VendorID from SPD
+                if check_spd:
+                    smb_addr = smbus_addr - 1
+                    vendorid = None
+                    for slot in range(0, 4):
+                        vendorid = mem_spd_read_reg(slot, SPD5_MR3, 2)  # MR3 + MR4 => Vendor ID
+                        if vendorid is not None and vendorid > 0:
+                            break
+                    if not vendorid:
+                        print(f'WARN: wrong SMBus addr = 0x{smbus_addr:X}  Reason: VendorID = {vendorid}')
+                        continue  # Cannot read VendorID from SPD
                 return smb
     finally:
         smb_addr = saved_smb_addr
@@ -537,7 +538,7 @@ def get_mem_spd_info(slot, mem_info: dict, with_pmic = True):
         raise RuntimeError(f'ERROR: Processor model 0x{cpu["model_id"]:X} not supported')
 
     if not g_smbus['cfg_addr']:
-        _smb = find_spd_smbus(check_pci_did = True)
+        _smb = find_spd_smbus(check_pci_did = True, check_spd = True)
         if not _smb:
             print('ERROR: Cannot found PCH with SMBus controller')
             return None
