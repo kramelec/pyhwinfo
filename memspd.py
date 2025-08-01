@@ -19,6 +19,7 @@ __author__ = 'remittor'
 from cpuidsdk64 import *
 from hardware import *
 from jep106 import *
+from pci_ids import *
 
 # Intel® 700 Series Chipset Family Platform Controller Hub
 # ref: vol1: https://cdrdv2-public.intel.com/743835/743835-004.pdf
@@ -416,6 +417,15 @@ def read_smbus_info(bus, dev, fun, full_info = True):
             if smbus_mem_addr_HI is not None:
                 smbus_mem_addr = (smbus_mem_addr_HI << 32) + (smbus_mem_addr << 8)
                 smbus['MEMIO_ADDR'] = smbus_mem_addr
+        # ref: 743845_001.pdf  section: Subsystem Vendor Identifiers (SVID)—Offset 2Ch
+        offset = 0x2c
+        SVID = pci_cfg_read(bus, dev, fun, offset, size = '2')
+        if SVID:
+            smbus['subsys_vid'] = SVID
+            smbus["subsys_vendor"] = pci_ids[SVID] if SVID in pci_ids else None
+        else:
+            smbus['subsys_vid'] = None
+            smbus["subsys_vendor"] = None
         # ref: 743845_001.pdf  section: Host Configuration (HCFG)—Offset 40h
         offset = 0x40
         HCFG = pci_cfg_read(bus, dev, fun, offset, size = 4)
@@ -475,6 +485,7 @@ def find_spd_smbus(check_pci_did = True, check_spd = True):
                     if not vendorid:
                         print(f'WARN: wrong SMBus addr = 0x{smbus_addr:X}  Reason: VendorID = {vendorid}')
                         continue  # Cannot read VendorID from SPD
+                print(f'INFO: SMBus: subsystem vendor = "{smb["subsys_vendor"]}"')
                 return smb
     finally:
         smb_addr = saved_smb_addr
