@@ -219,6 +219,7 @@ def smbus_read_u1(port, dev, command, status = 0xBF):
     if ok == 1:
         return val & 0xFF
     if rc == 0xBB:  # Timed out (1000*10*20 ticks)
+        print(f'ERROR: smbus_read_u1: timed out')
         return None
     if (status & SMBHSTSTS_INUSE_STS) != 0:
         print('ERROR: smbus_read_u1: status = IN_USE')
@@ -255,10 +256,10 @@ def smbus_pcall(port, dev, command, value, status = 0xBF):
     if ok == 1:
         return (vHI << 8) + vLO
     if vLO == 0 and vHI == 0:  # Timed out (400*10*20 ticks)
-        print(f'ERROR: smbus_send_recv_u2: timed out')
+        print(f'ERROR: smbus_pcall: timed out')
         return None
     if vLO == 1 and vHI == 0:  # DERR or BERR or FAIL
-        print(f'ERROR: smbus_send_recv_u2: DERR or BERR or FAIL')
+        print(f'ERROR: smbus_pcall: DERR or BERR or FAIL')
         return None
     return None
 
