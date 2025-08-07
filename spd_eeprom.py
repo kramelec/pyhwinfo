@@ -17,8 +17,12 @@ def bcd_to_ui8(bcd):
     return bcd - 6 * (bcd >> 4)
 
 def spd_eeprom_decode(data):
+    if not data:
+        return { }
     if isinstance(data, str):
         data = bytes.fromhex(data)
+    if len(data) < 256:
+        return { }
     out = { }
     usedBytes = get_bits(data, 0, 0, 3)
     out['UsedBytes']  = 128 * (1 << usedBytes) if usedBytes else 0
@@ -42,7 +46,7 @@ def spd_eeprom_decode(data):
         out['mod_type'] = 'UDIMM'
     elif mod_type == 0x03:
         out['mod_type'] = 'SODIMM'
-    elif mod_type == 0X0B:
+    elif mod_type == 0x0B:
         out['mod_type'] = 'LRDIMM'
     else:
         out['mod_type'] = ''
@@ -97,13 +101,16 @@ def spd_eeprom_decode(data):
 
     out['ranks'] = get_bits(data, 234, 3, 5) + 1
     out['rank_mix'] = 'asymmetrical' if get_bits(data, 234, 6) else 'symmetrical'
+
+    if len(data) < 600:
+        return out
     
     out['vendorid'] = jep106decode(get_bits(data, 512, 0, 15))
     out['vendor'] = jep106[out['vendorid']] if out['vendorid'] in jep106 else None
     out['manuf_year'] = 2000 + bcd_to_ui8(get_bits(data, 515, 0, 7))
     out['manuf_week'] = bcd_to_ui8(get_bits(data, 516, 0, 7))
     out['serial_number'] = data[517:517+2].hex().upper() + '-' + data[519:519+2].hex().upper()
-    out['part_number'] = data[521:551].decode('latin-1').strip()
+    out['part_number'] = data[521:551].decode('latin-1').replace('\0', ' ').strip()
     out['module_rev'] = get_bits(data, 551, 0, 7)
     out['die_vendorid'] = jep106decode(get_bits(data, 552, 0, 15))
     out['die_vendor'] = jep106[out['die_vendorid']] if out['die_vendorid'] in jep106 else None
