@@ -38,20 +38,22 @@ def port_read(port, size):
     _drv = _get_drv()
     if size == 1:
         func_num = CPUZ_PORT_READ_1
-        buf_fmt = "<BBBBI" # BYTE,BYTE,BYTE,BYTE,DWORD
     elif size == 2:
         func_num = CPUZ_PORT_READ_2
-        buf_fmt = "<HHI" # WORD,WORD,DWORD
     elif size == 4:
         func_num = CPUZ_PORT_READ_4
-        buf_fmt = "<II" # DWORD,DWORD
     else:
         raise ValueError()
     inbuf = struct.pack('<I', port)
-    buf_size = struct.calcsize(buf_fmt)
-    buf = DeviceIoControl(_drv, IOCTL(func_num), inbuf, buf_size, None)
-    out = struct.unpack(buf_fmt, buf)
-    return out[0]
+    buf = DeviceIoControl(_drv, IOCTL(func_num), inbuf, 8, None)
+    val, rc = struct.unpack("<II", buf)
+    if rc != 0x87654321:
+        raise RuntimeError(f'ERROR: port_read: cannot read data from port = 0x{port:04X}')
+    if size == 1:
+        return val & 0xFF
+    if size == 2:
+        return val & 0xFFFF
+    return val
 
 def port_read_u1(port):
     return port_read(port, 1)
@@ -76,7 +78,9 @@ def port_write(port, value, size = None):
     else:
         raise ValueError()
     inbuf = struct.pack('<II', port, value)
-    DeviceIoControl(_drv, IOCTL(func_num), inbuf, 8, None)
+    buf = DeviceIoControl(_drv, IOCTL(func_num), inbuf, 8, None)
+    rc = struct.unpack("<II", buf)
+    return True if rc[0] == 0x87654321 and rc[1] == 0x87654321 else False
 
 def port_write_u1(port, value):
     return port_write(port, value, 1)
@@ -214,10 +218,10 @@ def smbus_read_u1(port, dev, command, status = 0xBF):
     ok, val, status, rc = struct.unpack('<IIII', buf)
     if ok == 1:
         return val & 0xFF
-    if rc == 0xBB:
-        pass
-    if (status & 0xF0) == 0x40:   # SMBHSTSTS_INUSE_STS = 0x40
-        return b''
+    if rc == 0xBB:  # Timed out (1000*10*20 ticks)
+        return None
+    if (status & SMBHSTSTS_INUSE_STS) != 0:
+        print('ERROR: smbus_read_u1: status = IN_USE')
     return None
 
 # ioctl: 0x9C402690
@@ -232,27 +236,41 @@ def smbus_write_u1(port, dev, command, value, status = 0xBF):
     ok, rc = struct.unpack('<II', buf)
     if ok == 1:
         return True
-    if rc == 0x22222222:
-        pass
-    if rc == 0x33333333:
-        pass
+    if rc == 0x22222222:  # Timed out (1000*10*20 ticks)
+        print(f'ERROR: smbus_write_u1: timed out')
+        return False
+    if rc == 0x33333333:  # DERR or BERR or FAIL
+        print(f'ERROR: smbus_write_u1: DERR or BERR or FAIL')
+        return False
     return False
 
-# ioctl: 0x9C40269C
-def smbus_write_u2(port, dev, command, value, status = 0xBF):
+# ioctl: 0x9C40269C    SMBHSTCNT_PROC_CALL    I2C_SMBUS_PROC_CALL
+def smbus_pcall(port, dev, command, value, status = 0xBF):
     _drv = _get_drv()
     val_LO = value & 0xFF
     val_HI = (value >> 8) & 0xFF
     inbuf = struct.pack('<IIIIII', port, dev, command, status, val_LO, val_HI)
-    buf = DeviceIoControl(_drv, IOCTL(CPUZ_SMBUS_WRITE_2), inbuf, 16, None)
+    buf = DeviceIoControl(_drv, IOCTL(CPUZ_SMBUS_PCALL), inbuf, 16, None)
     ok, status, vLO, vHI = struct.unpack('<IIII', buf)
     if ok == 1:
-        return True
-    if vLO == 0 and vHI == 0:
-        pass
-    if vLO == 1 and vHI == 0:
-        pass
-    return False
+        return (vHI << 8) + vLO
+    if vLO == 0 and vHI == 0:  # Timed out (400*10*20 ticks)
+        print(f'ERROR: smbus_send_recv_u2: timed out')
+        return None
+    if vLO == 1 and vHI == 0:  # DERR or BERR or FAIL
+        print(f'ERROR: smbus_send_recv_u2: DERR or BERR or FAIL')
+        return None
+    return None
+
+# ioctl: 0x9C402688
+def smbus_read_X(port, dev, command):
+    _drv = _get_drv()
+    inbuf = struct.pack('<III', port, dev, command)
+    buf = DeviceIoControl(_drv, IOCTL(CPUZ_SMBUS_READ_X), inbuf, 16, None)
+    ok, val, xxx, ticks = struct.unpack('<IIII', buf)
+    if ok == 1:
+        return val
+    return None
     
 #######################################################
 #  MSR

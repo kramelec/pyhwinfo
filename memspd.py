@@ -93,14 +93,16 @@ SMBHSTCNT_START             = 0x40
 
 # =================================================================================================
 
-# source: S34HTS08AB_E.pdf   Table 82 Register MR11
-# bit3 = 0 => 1 Byte Addressing for SPD5 Hub Device Memory
 def _mem_spd_set_page(slot, page, check_status = True, ret_status = False):    
     if page < 0 or page >= 8:   # DDR5 SPD has 8 pages
         raise ValueError()    
-    rc = smbus_write_u2(smb_addr, SMBUS_SPD_DEVICE + slot, SPD5_MR11, page)
-    if not rc:
+    # ref: S34HTS08AB_E.pdf   Table 82 Register MR11
+    # bit[3] = 0 ==> 1 Byte Addressing for SPD5 Hub Device Memory
+    val = smbus_pcall(smb_addr, SMBUS_SPD_DEVICE + slot, SPD5_MR11, page)
+    if val is None:
+        print(f'ERROR: SMBus: cannot set MR11/MR12')
         return False
+    #print(f'INFO: SMBus: pcall(MR11) => 0x{val:04X}, page = 0x{page:02X}')
     if not check_status and not ret_status:
         return True
     status = smbus_read_u1(smb_addr, SMBUS_SPD_DEVICE + slot, SPD5_MR48)  # Device status
