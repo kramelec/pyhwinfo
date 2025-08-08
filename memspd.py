@@ -94,7 +94,7 @@ class MemSmb(SMBus):
                 return False
         if not check_status and not ret_status:
             return True
-        status = self.read_byte(self.spd_dev, SPD5_MR48)  # Device status
+        status = self._mem_spd_get_status()  # SPD Device status
         if ret_status:
             return status
         if status is None:
@@ -114,6 +114,14 @@ class MemSmb(SMBus):
         if (status & 0x80) != 0:
             print(f'INFO: SMBus: detect Pending IBI_STATUS : status = 0x{status:X}')  # IBI = In Band Interrupt
         return 0
+
+    def _mem_spd_get_status(self, ret_raw = False):
+        status = self._mem_spd_read_reg(SPD5_MR48)  # Device status
+        if status is None:
+            return None
+        if not ret_raw:
+            status &= 0x7F  # exclude Pending IBI_STATUS = 0x80    # ref: S34HTS08AB_E.pdf (Table 107)
+        return status
 
     def _mem_spd_read_reg(self, reg_offset, set_page = None):
         if set_page is not None:
@@ -143,12 +151,6 @@ class MemSmb(SMBus):
         finally:
             self.release()
         return None
-
-    def _mem_spd_get_status(self, ret_raw = False):
-        status = self._mem_spd_read_reg(SPD5_MR48)
-        if not ret_raw:
-            status &= 0x7F  # exclude Pending IBI_STATUS = 0x80    # ref: S34HTS08AB_E.pdf (Table 107)
-        return status
 
     def _mem_spd_read_byte(self, offset):
         if offset < 0 or offset >= 0x80:
