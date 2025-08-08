@@ -146,8 +146,8 @@ class SMBus():
                 return False
         return True
      
-    def kill(self):
-        # try to stop the current command
+    def ____kill(self):
+        # ref: https://github.com/hexawyz/Exo
         port_write_u1(self.port + SMBHSTCNT, SMBHSTCNT_KILL)
         time.sleep(0.01)
         port_write_u1(self.port + SMBHSTCNT, 0)
@@ -156,6 +156,16 @@ class SMBus():
         self.sts = sts
         if (sts & SMBHSTSTS_HOST_BUSY) != 0 or (sts & SMBHSTSTS_FAILED) == 0:
             print(f'WARN: SMBus: Failed terminating the transaction')
+
+    def kill(self):
+        # ref: https://github.com/Blacktempel/RAMSPDToolkit
+        cnt = port_read_u1(self.port + SMBHSTCNT)
+        port_write_u1(self.port + SMBHSTCNT, cnt | SMBHSTCNT_KILL)
+        print(f'WARN: SMBus: kill')
+        time.sleep(0.03)
+        cnt = port_read_u1(self.port + SMBHSTCNT)
+        port_write_u1(self.port + SMBHSTCNT, cnt | (SMBHSTCNT_KILL ^ 0xFF))
+        port_write_u1(self.port + SMBHSTSTS, STATUS_FLAGS)
 
     def wait_intr(self):
         self.timedout = False
@@ -181,21 +191,7 @@ class SMBus():
         return False
 
     def check_post(self):
-        '''
-        * If the SMBus is still busy, we give up
-        * Note: This timeout condition only happens when using polling transactions.
-        * For interrupt operation, NAK/timeout is indicated by DEV_ERR.
-        '''
-        if self.timedout:
-            # try to stop the current command
-            cnt = port_read_u1(self.port + SMBHSTCNT)
-            port_write_u1(self.port + SMBHSTCNT, cnt | SMBHSTCNT_KILL)
-            print(f'WARN: SMBus: kill')
-            time.sleep(1)
-            cnt = port_read_u1(self.port + SMBHSTCNT)
-            port_write_u1(self.port + SMBHSTCNT, cnt | (SMBHSTCNT_KILL ^ 0xFF))
-            port_write_u1(self.port + SMBHSTSTS, STATUS_FLAGS)
-            return False
+        # value of self.status from func "wait_intr"
         try:
             if (self.status & SMBHSTSTS_FAILED) != 0:
                 return False
@@ -216,6 +212,9 @@ class SMBus():
         port_write_u1(self.port + SMBHSTCNT, SMBHSTCNT_START | xact)
 
         rc = self.wait_intr()
+        if self.timedout:
+            self.kill()
+            return False
         # restore previous HSTCNT, enabling interrupts if previously enabled
         #port_write_u1(self.port + SMBHSTCNT, cnt)   # FIXME
         return self.check_post()
@@ -264,7 +263,6 @@ class SMBus():
         
         if not rc:
             print(f'ERROR: do_command: Failed do_transaction: status = 0x{self.sts:02X}')
-            #self.kill()
             return False if direction == I2C_WRITE else None
 
         if direction == I2C_WRITE or xact == SMBHSTCNT_QUICK:
