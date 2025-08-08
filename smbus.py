@@ -286,6 +286,13 @@ class SMBus():
             return smbus_read_u1(self.port, dev, command, status = self.init_status ^ 0xFF)
         return self.do_command(I2C_READ, SMBHSTCNT_BYTE_DATA, dev, command, None)
 
+    def read_word(self, dev, command):
+        if self.debug:
+            print(f'INFO: SMBus: read_word: dev = 0x{dev:02X}, command = 0x{command:02X} ...')
+        #if self.method == 0:
+        #    raise NotImplementedError()
+        return self.do_command(I2C_READ, SMBHSTCNT_WORD_DATA, dev, command, None)
+
     def write_byte(self, dev, command, value):
         if self.debug:
             print(f'INFO: SMBus: write_byte: dev = 0x{dev:02X}, command = 0x{command:02X}, value = 0x{value:02X} ...')

@@ -157,6 +157,11 @@ class MemSmb(SMBus):
             raise ValueError()
         return self.read_byte(self.spd_dev, offset | 0x80)
 
+    def _mem_spd_read_word(self, offset):
+        if offset < 0 or offset >= 0x7F:
+            raise ValueError()
+        return self.read_word(self.spd_dev, offset | 0x80)
+
     def mem_spd_read_byte(self, offset):
         if offset < 0 or offset >= 0x400:   # DDR5 SPD of 1024 bytes len
             raise ValueError()
@@ -179,6 +184,7 @@ class MemSmb(SMBus):
         buf = b''
         self.acquire()
         try:
+            size = 1 if self.method == 0 else 2
             for spd_page in range(0, 8):
                 rc = self._mem_spd_set_page(spd_page)
                 if not rc:
@@ -188,11 +194,14 @@ class MemSmb(SMBus):
                 status = self._mem_spd_get_status()
                 if status != 0:
                     break
-                for offset in range(0, 0x80):
-                    val = self._mem_spd_read_byte(offset)
+                for offset in range(0, 0x80, size):
+                    if size == 1:
+                        val = self._mem_spd_read_byte(offset)
+                    else:
+                        val = self._mem_spd_read_word(offset)
                     if val is None:
                         break
-                    buf += int_encode(val, 1)
+                    buf += int_encode(val, size)
                 if val is None:
                     break
             # restore page 0
