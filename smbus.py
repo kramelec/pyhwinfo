@@ -93,6 +93,7 @@ class SMBus():
         self.inuse_timeout = 500
         self.lock_status = SMBHSTSTS_INUSE_STS
         self.init_status = SMBHSTSTS_INUSE_STS # actuality only for method 0
+        self.wait_intr_timeout = 100
         self.init_mutex()
 
     def acquire(self, throwable = True):
@@ -126,8 +127,159 @@ class SMBus():
         finally:
             self.mutex.release()
 
+    def check_pre(self):
+        # Make sure the SMBus host is ready to start transmitting.
+        sts = port_read_u1(self.port + SMBHSTSTS)
+        self.sts = sts
+        if (sts & SMBHSTSTS_HOST_BUSY) != 0:
+            print(f'ERROR: SMBus: check_pre: SMBus on port 0x{self.port:04X} is busy, cannot use it! (sts = 0x{sts:02X})')
+            return False
+        sts &= STATUS_FLAGS
+        if sts != 0:
+            if self.debug:
+                print(f'SMBus: Clearing status flags: 0x{sts:02X}');
+            port_write_u1(self.port + SMBHSTSTS, sts)
+            sts = port_read_u1(self.port + SMBHSTSTS)
+            self.sts = sts
+            if (sts & STATUS_FLAGS) != 0:
+                print(f'ERROR: SMBus: cannot clear status (sts = 0x{self.sts:02X})')
+                return False
+        return True
+     
+    def kill(self):
+        # try to stop the current command
+        port_write_u1(self.port + SMBHSTCNT, SMBHSTCNT_KILL)
+        time.sleep(0.01)
+        port_write_u1(self.port + SMBHSTCNT, 0)
+        # Check if it worked
+        sts = port_read_u1(self.port + SMBHSTSTS)
+        self.sts = sts
+        if (sts & SMBHSTSTS_HOST_BUSY) != 0 or (sts & SMBHSTSTS_FAILED) == 0:
+            print(f'WARN: SMBus: Failed terminating the transaction')
+
+    def wait_intr(self):
+        self.timedout = False
+        #time.sleep(0.001)
+        start_time = datetime.now()
+        while True:            
+            sts = port_read_u1(self.port + SMBHSTSTS)
+            self.sts = sts
+            self.status = sts & (STATUS_ERROR_FLAGS | SMBHSTSTS_INTR)
+            if (self.status & SMBHSTSTS_HOST_BUSY) == 0:
+                if (sts & STATUS_ERROR_FLAGS) != 0:
+                    print(f'WARN: wait_intr: detect ERROR = 0x{sts:02X}')
+                    return False
+                if (sts & SMBHSTSTS_INTR) != 0:                    
+                    return True
+                #print(f'WARN: wait_intr: not detect INTR (sts = 0x{sts:02X})')
+                #return True
+            if datetime.now() - start_time > timedelta(milliseconds = self.wait_intr_timeout):
+                self.timedout = True
+                print(f'WARN: wait_intr: timed out (sts = 0x{sts:02X})')
+                return False
+            #time.sleep(0.25 / 1000)
+        return False
+
+    def check_post(self):
+        '''
+        * If the SMBus is still busy, we give up
+        * Note: This timeout condition only happens when using polling transactions.
+        * For interrupt operation, NAK/timeout is indicated by DEV_ERR.
+        '''
+        if self.timedout:
+            # try to stop the current command
+            cnt = port_read_u1(self.port + SMBHSTCNT)
+            port_write_u1(self.port + SMBHSTCNT, cnt | SMBHSTCNT_KILL)
+            print(f'WARN: SMBus: kill')
+            time.sleep(1)
+            cnt = port_read_u1(self.port + SMBHSTCNT)
+            port_write_u1(self.port + SMBHSTCNT, cnt | (SMBHSTCNT_KILL ^ 0xFF))
+            port_write_u1(self.port + SMBHSTSTS, STATUS_FLAGS)
+            return False
+        try:
+            if (self.status & SMBHSTSTS_FAILED) != 0:
+                return False
+            if (self.status & SMBHSTSTS_DEV_ERR) != 0:
+                return False
+            if (self.status & SMBHSTSTS_BUS_ERR) != 0:
+                return False
+        finally:
+            # Clear status flags
+            port_write_u1(self.port + SMBHSTSTS, self.status)
+        return True
+
+    def do_transaction(self, xact):
+        cnt = port_read_u1(self.port + SMBHSTCNT)
+        port_write_u1(self.port + SMBHSTCNT, cnt & (SMBHSTCNT_INTREN ^ 0xFF))
+
+        # the current contents of SMBHSTCNT can be overwritten, since PEC, SMBSCMD are passed in xact 
+        port_write_u1(self.port + SMBHSTCNT, SMBHSTCNT_START | xact)
+
+        rc = self.wait_intr()
+        # restore previous HSTCNT, enabling interrupts if previously enabled
+        #port_write_u1(self.port + SMBHSTCNT, cnt)   # FIXME
+        return self.check_post()
+
     def do_command(self, direction, xact, dev, command, value):
-        raise NotImplementedError()
+        self.timedout = False
+        self.status = 0
+        if not self.check_pre():
+            return False if direction == I2C_WRITE else None
+
+        if xact == SMBHSTCNT_QUICK:
+            port_write_u1(self.port + SMBHSTADD, (dev << 1) | direction)
+        elif xact == SMBHSTCNT_BYTE:
+            port_write_u1(self.port + SMBHSTADD, (dev << 1) | direction)
+            if direction == I2C_WRITE:
+                port_write_u1(self.port + SMBHSTCMD, command)
+        elif xact == SMBHSTCNT_BYTE_DATA:
+            port_write_u1(self.port + SMBHSTADD, (dev << 1) | direction)
+            port_write_u1(self.port + SMBHSTCMD, command)
+            if direction == I2C_WRITE:
+                port_write_u1(self.port + SMBHSTDAT0, value)
+        elif xact == SMBHSTCNT_WORD_DATA:
+            port_write_u1(self.port + SMBHSTADD, (dev << 1) | direction)
+            port_write_u1(self.port + SMBHSTCMD, command)
+            if direction == I2C_WRITE:
+                port_write_u1(self.port + SMBHSTDAT0, value & 0xFF)
+                port_write_u1(self.port + SMBHSTDAT1, (value >> 8) & 0xFF)
+        elif xact == SMBHSTCNT_PROC_CALL:
+            port_write_u1(self.port + SMBHSTADD, (dev << 1) | direction)
+            port_write_u1(self.port + SMBHSTCMD, command)
+            if value is not None:
+                port_write_u1(self.port + SMBHSTDAT0, value & 0xFF)
+                port_write_u1(self.port + SMBHSTDAT1, (value >> 8) & 0xFF)
+        else:
+            raise RuntimeError(f'Unsupported transaction = 0x{xact:02X}')
+
+        aux = port_read_u1(self.port + SMBAUXCTL)
+        port_write_u1(SMBAUXCTL, aux & (SMBAUXCTL_CRC ^ 0xFF))
+        
+        self.status = 0
+        rc = self.do_transaction(xact)
+        
+        # Some BIOSes don't like it when PEC is enabled at reboot or resume time, so we forcibly disable it after every transaction. Turn off E32B for the same reason.
+        aux = port_read_u1(self.port + SMBAUXCTL)
+        port_write_u1(self.port + SMBAUXCTL, aux & ((SMBAUXCTL_CRC | SMBAUXCTL_E32B) ^ 0xFF))
+        
+        if not rc:
+            print(f'ERROR: do_command: Failed do_transaction: status = 0x{self.sts:02X}')
+            #self.kill()
+            return False if direction == I2C_WRITE else None
+
+        if direction == I2C_WRITE or xact == SMBHSTCNT_QUICK:
+            return True
+
+        if direction == I2C_READ:
+            if xact in [ SMBHSTCNT_BYTE, SMBHSTCNT_BYTE_DATA ]:
+                return port_read_u1(self.port + SMBHSTDAT0)
+            elif xact in [ SMBHSTCNT_WORD_DATA, SMBHSTCNT_PROC_CALL ]:
+                val_LO = port_read_u1(self.port + SMBHSTDAT0)
+                val_HI = port_read_u1(self.port + SMBHSTDAT1)
+                return (val_HI << 8) + val_LO
+            return None
+
+        return False if direction == I2C_WRITE else None
 
     def read_byte(self, dev, command):
         if self.debug:

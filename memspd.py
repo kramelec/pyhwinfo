@@ -173,6 +173,7 @@ class MemSmb(SMBus):
         return None
 
     def mem_spd_read_full(self):
+        print(f'INFO: SMBus: mem_spd_read_full({self.slot}) ...')
         buf = b''
         self.acquire()
         try:
@@ -196,8 +197,8 @@ class MemSmb(SMBus):
             self._mem_spd_set_page(0)
         finally:
             self.release()
+            print(f'INFO: SMBus: mem_spd_read_full({self.slot}) readed {len(buf)} bytes')
         return buf
-
 
     def _mem_pmic_init(self):
         rc = self._mem_spd_set_page(0)
