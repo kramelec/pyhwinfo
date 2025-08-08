@@ -57,8 +57,7 @@ SMBHSTSTS_HOST_BUSY     = 0x01
 
 STATUS_ERROR_FLAGS = SMBHSTSTS_FAILED | SMBHSTSTS_BUS_ERR | SMBHSTSTS_DEV_ERR
 STATUS_FLAGS       = SMBHSTSTS_BYTE_DONE | SMBHSTSTS_INTR | STATUS_ERROR_FLAGS
-
-SMBHSTSTS_XXX = 0xFF & (~SMBHSTSTS_INUSE_STS)   # 0xBF : all flags except SMBHSTSTS_INUSE_STS
+SMBHSTSTS_XXX = (SMBHSTSTS_INUSE_STS ^ 0xFF)   # 0xBF : all flags except SMBHSTSTS_INUSE_STS
 
 # i801 Hosts Control register bits
 SMBHSTCNT_QUICK             = 0x00
@@ -90,7 +89,42 @@ class SMBus():
         self.status = 0
         self.timedout = False
         self.mutex = None
+        self.mutex_wait_timeout = 2000
+        self.inuse_timeout = 500
+        self.lock_status = SMBHSTSTS_INUSE_STS
+        self.init_status = SMBHSTSTS_INUSE_STS # actuality only for method 0
         self.init_mutex()
+
+    def acquire(self, throwable = True):
+        self.mutex.acquire(wait_ms = self.mutex_wait_timeout, throwable = throwable)
+        is_inuse = True
+        try:
+            # Wait for device to be unlocked by BIOS/ACPI
+            # Linux doesn't do this, since some BIOSes might not unlock it
+            start_time = datetime.now()
+            while datetime.now() - start_time <= timedelta(milliseconds = self.inuse_timeout):
+                self.sts = port_read_u1(self.port + SMBHSTSTS)
+                is_inuse = (self.sts & SMBHSTSTS_INUSE_STS) != 0
+                if not is_inuse:
+                    break
+            if not is_inuse and self.lock_status is not None:
+                port_write_u1(self.port + SMBHSTSTS, self.lock_status ^ 0xFF)
+        finally:    
+            if is_inuse:
+                print(f'ERROR: SMBus device is in use by BIOS/ACPI')
+                self.mutex.release()
+                if throwable:
+                    raise RuntimeError(f'ERROR: SMBus device is in use by BIOS/ACPI')
+                return False
+        return True
+
+    def release(self):
+        try:
+            # Unlock the SMBus device for use by BIOS/ACPI, and clear status flags
+            # if not done already.
+            port_write_u1(self.port + SMBHSTSTS, SMBHSTSTS_INUSE_STS | STATUS_FLAGS)
+        finally:
+            self.mutex.release()
 
     def do_command(self, direction, xact, dev, command, value):
         raise NotImplementedError()
@@ -99,28 +133,28 @@ class SMBus():
         if self.debug:
             print(f'INFO: SMBus: read_byte: dev = 0x{dev:02X}, command = 0x{command:02X} ...')
         if self.method == 0:
-            return smbus_read_u1(self.port, dev, command)
+            return smbus_read_u1(self.port, dev, command, status = self.init_status ^ 0xFF)
         return self.do_command(I2C_READ, SMBHSTCNT_BYTE_DATA, dev, command, None)
 
     def write_byte(self, dev, command, value):
         if self.debug:
             print(f'INFO: SMBus: write_byte: dev = 0x{dev:02X}, command = 0x{command:02X}, value = 0x{value:02X} ...')
         if self.method == 0:
-            return smbus_write_u1(self.port, dev, command, value)
+            return smbus_write_u1(self.port, dev, command, value, status = self.init_status ^ 0xFF)
         return self.do_command(I2C_WRITE, SMBHSTCNT_BYTE_DATA, dev, command, value)
 
     def write_word(self, dev, command, value):
         if self.debug:
             print(f'INFO: SMBus: write_word: dev = 0x{dev:02X}, command = 0x{command:02X}, value = 0x{value:04X} ...')
-        if self.method == 0:
-            raise NotImplementedError()
+        #if self.method == 0:
+        #    raise NotImplementedError()
         return self.do_command(I2C_WRITE, SMBHSTCNT_WORD_DATA, dev, command, value)
 
     def proc_call(self, dev, command, value):
         if self.debug:
             print(f'INFO: SMBus: proc_call: dev = 0x{dev:02X}, command = 0x{command:02X}, value = 0x{value:04X} ...')
         if self.method == 0:
-            return smbus_pcall(self.port, dev, command, value)
+            return smbus_pcall(self.port, dev, command, value, status = self.init_status ^ 0xFF)
         return self.do_command(I2C_READ | I2C_WRITE, SMBHSTCNT_PROC_CALL, dev, command, value)
 
     def read_info(self, bus, dev, fun, full_info = True):

@@ -123,7 +123,7 @@ class MemSmb(SMBus):
         return self.read_byte(self.spd_dev, reg_offset)
 
     def mem_spd_read_reg(self, reg_offset, size = 1):
-        self.mutex.acquire()
+        self.acquire()
         try:
             offset = reg_offset & 0x7F   # read reg, not SPD page !!!
             val = self._mem_spd_read_reg(offset, set_page = 0)
@@ -135,13 +135,13 @@ class MemSmb(SMBus):
             elif size == 2:
                 val_HI = self._mem_spd_read_reg(offset + 1)
                 if val_HI is None:
-                    print(f'ERROR: mem_spd_read_reg({self.slot}): VAL = {val}')
+                    print(f'ERROR: mem_spd_read_reg({self.slot}): VAL = {val_HI}')
                     return None
                 return (val_HI << 8) + val
             else:
                 return None
         finally:
-            self.mutex.release()
+            self.release()
         return None
 
     def _mem_spd_get_status(self, ret_raw = False):
@@ -158,7 +158,7 @@ class MemSmb(SMBus):
     def mem_spd_read_byte(self, offset):
         if offset < 0 or offset >= 0x400:   # DDR5 SPD of 1024 bytes len
             raise ValueError()
-        self.mutex.acquire()
+        self.acquire()
         try:
             spd_page = offset // 0x80
             rc = self._mem_spd_set_page(spd_page)
@@ -169,12 +169,12 @@ class MemSmb(SMBus):
                 return None
             return self._mem_spd_read_byte(offset - spd_page * 0x80)
         finally:
-            self.mutex.release()
+            self.release()
         return None
 
     def mem_spd_read_full(self):
         buf = b''
-        self.mutex.acquire()
+        self.acquire()
         try:
             for spd_page in range(0, 8):
                 rc = self._mem_spd_set_page(spd_page)
@@ -190,10 +190,12 @@ class MemSmb(SMBus):
                     if val is None:
                         break
                     buf += int_encode(val, 1)
+                if val is None:
+                    break
             # restore page 0
             self._mem_spd_set_page(0)
         finally:
-            self.mutex.release()
+            self.release()
         return buf
 
 
@@ -228,7 +230,7 @@ class MemSmb(SMBus):
             raise RuntimeError()
         return PMIC_RICHTEK_ADC_ENABLE | (SETDIM(adc_sel, 4) << 3) | updFreq  # ref: "ADC Select" in doc DSQ5119A-02.pdf
     
-    def pmic_read_adc(self, adc_sel):
+    def _pmic_read_adc(self, adc_sel):
         # prepare R31 for NULL value
         cmd = self.get_pmic_adc_command(PMIC_RICHTEK_ADC_NULL)
         self.write_byte(self.pmic_dev, PMIC_RICHTEK_R30, cmd)
@@ -263,13 +265,10 @@ class MemSmb(SMBus):
 
     def mem_pmic_read(self):
         out = { "smbus_dev": self.pmic_dev }
-        self.mutex.acquire()
+        self.acquire()
         try:
             rc = self.read_byte(self.pmic_dev, 0)
             if rc != 0:
-                self.mutex.release()
-                time.sleep(0.02)
-                self.mutex.acquire()
                 rc = self.read_byte(self.pmic_dev, 0)
                 if rc != 0:
                     print('ERROR: PMIC not inited!')
@@ -317,7 +316,7 @@ class MemSmb(SMBus):
             
             def get_pmic_param(name, adc_sel, mult = 0.015):
                 nonlocal self, out
-                val = self.pmic_read_adc(adc_sel)
+                val = self._pmic_read_adc(adc_sel)
                 val = self.voltage_decode(val, mult)
                 print(f'PMIC[{name}] = {val} V')
                 out[name] = val
@@ -347,7 +346,7 @@ class MemSmb(SMBus):
             smbus_write_u1(smb_addr, SMBUS_PMIC_DEVICE + slot, 0x1B, x2)
             '''
         finally:
-            self.mutex.release()
+            self.release()
         return out
     
 # =================================================================================================
@@ -454,6 +453,9 @@ def get_mem_spd_info(slot, mem_info: dict, with_pmic = True):
     print(f'SPD Vendor ID = 0x{spd_vid:04X} "{spd["spd_vendor"]}"')
 
     val = g_smb.mem_spd_read_reg(SPD5_MR18)  # Device Configuration
+    if val is None:
+        print(f'WARN: Cannot read DevConf from SPD#{slot}')
+        return None
     PEC_EN = get_bits(val, 0, 7)
     #print(f'{PEC_EN=}')
     PAR_DIS = get_bits(val, 0, 6)
@@ -481,7 +483,9 @@ def get_mem_spd_info(slot, mem_info: dict, with_pmic = True):
     spd['SPD'] = None
 
     spd_data = g_smb.mem_spd_read_full()
-    #print(f'SPD[0] = {spd_data.hex()}')
+    if spd_data and g_smb.debug:
+        print(f'SPD[{slot}] = {spd_data.hex()}')
+        print(f'SPD len = {len(spd_data)}')
     if spd_data and len(spd_data) >= 1024:
         spd['spd_eeprom'] = spd_data.hex()
 
