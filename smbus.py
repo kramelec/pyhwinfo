@@ -13,6 +13,7 @@ from ctypes import byref
 from types import SimpleNamespace
 import enum
 import json
+import logging
 
 from datetime import datetime
 from datetime import timedelta
@@ -80,6 +81,35 @@ SMBAUXCTL_E32B    = 0x02
 
 # =================================================================================================
 
+TRACE_LEVEL_NUM = 5
+
+logging.addLevelName(TRACE_LEVEL_NUM, "TRACE")
+
+def _logging_trace(self, message, *args, **kws):
+    if self.isEnabledFor(TRACE_LEVEL_NUM):
+        self._log(TRACE_LEVEL_NUM, message, args, **kws)
+
+logging.Logger.trace = _logging_trace
+
+def _change_log_level(self, new_level):
+    current_level = self.getEffectiveLevel()
+    self._saved_log_level = current_level
+    self.setLevel(new_level)
+    return current_level
+
+logging.Logger.change_log_level = _change_log_level
+    
+def _restore_log_level(self):
+    self.setLevel(self._saved_log_level)
+
+logging.Logger.restore_log_level = _restore_log_level
+
+
+logging.basicConfig(level = logging.WARNING, format='%(levelname)s: %(message)s')
+
+log = logging.getLogger(__name__)
+
+
 class IOMODE(enum.IntEnum):
     def __new__(cls, value, name, doc = None):
         obj = int.__new__(cls, value)
@@ -93,7 +123,6 @@ class IOMODE(enum.IntEnum):
 class SMBus():
     def __init__(self, port):
         self.info = { }
-        self.debug = False
         self.io_mode = IOMODE.CPUZMODE
         self.port = port
         self.sts = 0
@@ -123,7 +152,7 @@ class SMBus():
                 port_write_u1(self.port + SMBHSTSTS, self.lock_status ^ 0xFF)
         finally:    
             if is_inuse:
-                print(f'ERROR: SMBus device is in use by BIOS/ACPI')
+                log.error(f'SMBus device is in use by BIOS/ACPI')
                 self.mutex.release()
                 if throwable:
                     raise RuntimeError(f'ERROR: SMBus device is in use by BIOS/ACPI')
@@ -143,17 +172,16 @@ class SMBus():
         sts = port_read_u1(self.port + SMBHSTSTS)
         self.sts = sts
         if (sts & SMBHSTSTS_HOST_BUSY) != 0:
-            print(f'ERROR: SMBus: check_pre: SMBus on port 0x{self.port:04X} is busy, cannot use it! (sts = 0x{sts:02X})')
+            log.error(f'SMBus: check_pre: SMBus on port 0x{self.port:04X} is busy, cannot use it! (sts = 0x{sts:02X})')
             return False
         sts &= STATUS_FLAGS
         if sts != 0:
-            if self.debug:
-                print(f'SMBus: Clearing status flags: 0x{sts:02X}');
+            log.info(f'SMBus: Clearing status flags: 0x{sts:02X}')
             port_write_u1(self.port + SMBHSTSTS, sts)
             sts = port_read_u1(self.port + SMBHSTSTS)
             self.sts = sts
             if (sts & STATUS_FLAGS) != 0:
-                print(f'ERROR: SMBus: cannot clear status (sts = 0x{self.sts:02X})')
+                log.error(f'SMBus: cannot clear status (sts = 0x{self.sts:02X})')
                 return False
         return True
      
@@ -166,13 +194,13 @@ class SMBus():
         sts = port_read_u1(self.port + SMBHSTSTS)
         self.sts = sts
         if (sts & SMBHSTSTS_HOST_BUSY) != 0 or (sts & SMBHSTSTS_FAILED) == 0:
-            print(f'WARN: SMBus: Failed terminating the transaction')
+            log.warning(f'SMBus: Failed terminating the transaction')
 
     def kill(self):
         # ref: https://github.com/Blacktempel/RAMSPDToolkit
         cnt = port_read_u1(self.port + SMBHSTCNT)
         port_write_u1(self.port + SMBHSTCNT, cnt | SMBHSTCNT_KILL)
-        print(f'WARN: SMBus: kill')
+        log.warning(f'SMBus: kill')
         time.sleep(0.03)
         cnt = port_read_u1(self.port + SMBHSTCNT)
         port_write_u1(self.port + SMBHSTCNT, cnt | (SMBHSTCNT_KILL ^ 0xFF))
@@ -188,17 +216,14 @@ class SMBus():
             self.status = sts & (STATUS_ERROR_FLAGS | SMBHSTSTS_INTR)
             if (self.status & SMBHSTSTS_HOST_BUSY) == 0:
                 if (sts & STATUS_ERROR_FLAGS) != 0:
-                    print(f'WARN: wait_intr: detect ERROR = 0x{sts:02X}')
+                    log.warning(f'wait_intr: detect ERROR = 0x{sts:02X}')
                     return False
                 if (sts & SMBHSTSTS_INTR) != 0:                    
                     return True
-                #print(f'WARN: wait_intr: not detect INTR (sts = 0x{sts:02X})')
-                #return True
             if datetime.now() - start_time > timedelta(milliseconds = self.wait_intr_timeout):
                 self.timedout = True
-                print(f'WARN: wait_intr: timed out (sts = 0x{sts:02X})')
+                log.warning(f'wait_intr: timed out (sts = 0x{sts:02X})')
                 return False
-            #time.sleep(0.25 / 1000)
         return False
 
     def check_post(self):
@@ -273,7 +298,7 @@ class SMBus():
         port_write_u1(self.port + SMBAUXCTL, aux & ((SMBAUXCTL_CRC | SMBAUXCTL_E32B) ^ 0xFF))
         
         if not rc:
-            print(f'ERROR: do_command: Failed do_transaction: status = 0x{self.sts:02X}')
+            log.error(f'do_command: Failed do_transaction: status = 0x{self.sts:02X}')
             return False if direction == I2C_WRITE else None
 
         if direction == I2C_WRITE or xact == SMBHSTCNT_QUICK:
@@ -291,36 +316,31 @@ class SMBus():
         return False if direction == I2C_WRITE else None
 
     def read_byte(self, dev, command):
-        if self.debug:
-            print(f'INFO: SMBus: read_byte: dev = 0x{dev:02X}, command = 0x{command:02X} ...')
+        log.debug(f'SMBus: read_byte: dev = 0x{dev:02X}, command = 0x{command:02X} ...')
         if self.io_mode == IOMODE.CPUZMODE:
             return smbus_read_u1(self.port, dev, command, status = self.init_status ^ 0xFF)
         return self.do_command(I2C_READ, SMBHSTCNT_BYTE_DATA, dev, command, None)
 
     def read_word(self, dev, command):
-        if self.debug:
-            print(f'INFO: SMBus: read_word: dev = 0x{dev:02X}, command = 0x{command:02X} ...')
+        log.debug(f'SMBus: read_word: dev = 0x{dev:02X}, command = 0x{command:02X} ...')
         #if self.io_mode == IOMODE.CPUZMODE:
         #    raise NotImplementedError()
         return self.do_command(I2C_READ, SMBHSTCNT_WORD_DATA, dev, command, None)
 
     def write_byte(self, dev, command, value):
-        if self.debug:
-            print(f'INFO: SMBus: write_byte: dev = 0x{dev:02X}, command = 0x{command:02X}, value = 0x{value:02X} ...')
+        log.debug(f'SMBus: write_byte: dev = 0x{dev:02X}, command = 0x{command:02X}, value = 0x{value:02X} ...')
         if self.io_mode == IOMODE.CPUZMODE:
             return smbus_write_u1(self.port, dev, command, value, status = self.init_status ^ 0xFF)
         return self.do_command(I2C_WRITE, SMBHSTCNT_BYTE_DATA, dev, command, value)
 
     def write_word(self, dev, command, value):
-        if self.debug:
-            print(f'INFO: SMBus: write_word: dev = 0x{dev:02X}, command = 0x{command:02X}, value = 0x{value:04X} ...')
+        log.debug(f'SMBus: write_word: dev = 0x{dev:02X}, command = 0x{command:02X}, value = 0x{value:04X} ...')
         #if self.io_mode == IOMODE.CPUZMODE:
         #    raise NotImplementedError()
         return self.do_command(I2C_WRITE, SMBHSTCNT_WORD_DATA, dev, command, value)
 
     def proc_call(self, dev, command, value):
-        if self.debug:
-            print(f'INFO: SMBus: proc_call: dev = 0x{dev:02X}, command = 0x{command:02X}, value = 0x{value:04X} ...')
+        log.debug(f'SMBus: proc_call: dev = 0x{dev:02X}, command = 0x{command:02X}, value = 0x{value:04X} ...')
         if self.io_mode == IOMODE.CPUZMODE:
             return smbus_pcall(self.port, dev, command, value, status = self.init_status ^ 0xFF)
         return self.do_command(I2C_READ | I2C_WRITE, SMBHSTCNT_PROC_CALL, dev, command, value)
@@ -408,20 +428,20 @@ class SMBus():
             if smbus_addr is None or did is None:
                 continue
             print(f'Detect SMBus on [{bus:02X}:{dev:02X}:{fun:02X}] addr = 0x{smbus_addr:X}, VID = 0x{vid:04X}, DID = 0x{did:04X}')
-            print(f'INFO: SMBus MSE = {smb["MSE"]}')
+            log.info(f'SMBus MSE = {smb["MSE"]}')
             if smb['MEMIO_ADDR']:
-                print(f'INFO: SMBus Mem Addr = 0x{smb["MEMIO_ADDR"]:X}')
+                log.info(f'SMBus Mem Addr = 0x{smb["MEMIO_ADDR"]:X}')
             if (smbus_addr & 1) == 0:
-                print(f'WARN: Wrong SMBus addr = 0x{smbus_addr:X}')
+                log.warning(f'Wrong SMBus addr = 0x{smbus_addr:X}')
                 continue  # incorret value
             if smb['I2C_EN'] == 1:
-                print(f'WARN: SMBus I2C_EN = 1')
+                log.warning(f'SMBus I2C_EN = 1')
                 continue  # incorret value
             if smb['IOSE'] == 0: 
-                print(f'WARN: SMBus IOSE = 0')
+                log.warning(f'SMBus IOSE = 0')
                 continue  # incorret value
             if did not in PCI_ID_SMBUS_INTEL and check_pci_did:
-                print(f'WARN: unsupported DID = 0x{did:04X}')
+                log.warning(f'unsupported DID = 0x{did:04X}')
                 continue
             if aux_check:
                 rc = aux_check(self, smb)

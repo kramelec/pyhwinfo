@@ -12,6 +12,7 @@ import ctypes.wintypes as wintypes
 from ctypes import byref
 from types import SimpleNamespace
 import json
+import logging
 
 from datetime import datetime
 from datetime import timedelta
@@ -90,7 +91,7 @@ class MemSmb(SMBus):
         if val is None:
             rc = self.write_byte(self.spd_dev, SPD5_MR11, page)
             if not rc:
-                print(f'ERROR: _mem_spd_set_page({page}): cannot set page')
+                log.error(f'_mem_spd_set_page({page}): cannot set page')
                 return False
         if not check_status and not ret_status:
             return True
@@ -98,11 +99,11 @@ class MemSmb(SMBus):
         if ret_status:
             return status
         if status is None:
-            print(f'ERROR: SMBus: cannot get status for SPD device = 0x{self.spd_dev:02X}')
+            log.error(f'SMBus: cannot get status for SPD device = 0x{self.spd_dev:02X}')
             return False
         status &= 0x7F  # exclude Pending IBI_STATUS = 0x80    # ref: S34HTS08AB_E.pdf (Table 107)
         if status != 0:
-            print(f'ERROR: _mem_spd_set_page: status = 0x{status:02X}')
+            log.error(f'_mem_spd_set_page: status = 0x{status:02X}')
         return True if status == 0 else False
 
     def _mem_spd_init(self, page):
@@ -112,7 +113,7 @@ class MemSmb(SMBus):
         if status == False:
             return -1
         if (status & 0x80) != 0:
-            print(f'INFO: SMBus: detect Pending IBI_STATUS : status = 0x{status:X}')  # IBI = In Band Interrupt
+            log.info(f'SMBus: detect Pending IBI_STATUS : status = 0x{status:X}')  # IBI = In Band Interrupt
         return 0
 
     def _mem_spd_get_status(self, ret_raw = False):
@@ -136,14 +137,14 @@ class MemSmb(SMBus):
             offset = reg_offset & 0x7F   # read reg, not SPD page !!!
             val = self._mem_spd_read_reg(offset, set_page = 0)
             if val is None:
-                print(f'ERROR: mem_spd_read_reg({self.slot}): val = {val}')
+                log.error(f'mem_spd_read_reg({self.slot}): val = {val}')
                 return None
             if size == 1:
                 return val
             elif size == 2:
                 val_HI = self._mem_spd_read_reg(offset + 1)
                 if val_HI is None:
-                    print(f'ERROR: mem_spd_read_reg({self.slot}): VAL = {val_HI}')
+                    log.error(f'mem_spd_read_reg({self.slot}): VAL = {val_HI}')
                     return None
                 return (val_HI << 8) + val
             else:
@@ -180,7 +181,7 @@ class MemSmb(SMBus):
         return None
 
     def mem_spd_read_full(self):
-        print(f'INFO: SMBus: mem_spd_read_full({self.slot}) ...')
+        log.info(f'SMBus: mem_spd_read_full({self.slot}) ...')
         buf = b''
         self.acquire()
         try:
@@ -208,7 +209,7 @@ class MemSmb(SMBus):
             self._mem_spd_set_page(0)
         finally:
             self.release()
-            print(f'INFO: SMBus: mem_spd_read_full({self.slot}) readed {len(buf)} bytes')
+            log.info(f'SMBus: mem_spd_read_full({self.slot}) readed {len(buf)} bytes')
         return buf
 
     def _mem_pmic_init(self):
@@ -217,7 +218,7 @@ class MemSmb(SMBus):
             return None
         #status = port_read_u1(self.port + SMBHSTSTS)
         #if status != 0:
-        #    print(f'ERROR: PMIC status = 0x{status:X}')
+        #    log.error(f'PMIC status = 0x{status:X}')
         #    return None
         port_write_u1(self.port + SMBHSTSTS, SMBHSTSTS_XXX)  # init SMBus state
         dev = 0x18   # https://i2cdevices.org/addresses/0x18
@@ -225,12 +226,12 @@ class MemSmb(SMBus):
         cmd = 0x05   # ???????
         port_write_u1(self.port + SMBHSTCMD, cmd)
         cnt = port_read_u1(self.port + SMBHSTCNT)
-        print(f'cnt = 0x{cnt:X}')
+        log.debug(f'cnt = 0x{cnt:X}')
         port_write_u1(self.port + SMBHSTCNT, SMBHSTCNT_START + SMBHSTCNT_WORD_DATA)
         code = port_read_u1(self.port + SMBHSTSTS)
-        print(f'CODE = 0x{code:X}')
+        log.debug(f'CODE = 0x{code:X}')
         code = port_read_u1(self.port + SMBHSTSTS)
-        print(f'CODE = 0x{code:X}')
+        log.debug(f'CODE = 0x{code:X}')
         port_write_u1(self.port + SMBHSTSTS, code)
         return code
 
@@ -283,7 +284,7 @@ class MemSmb(SMBus):
             if rc != 0:
                 rc = self.read_byte(self.pmic_dev, 0)
                 if rc != 0:
-                    print('ERROR: PMIC not inited!')
+                    log.error('PMIC not inited!')
                     return None
             vid_HI = self.read_byte(self.pmic_dev, PMIC_RICHTEK_R3C)  # PMIC Vendor ID
             vid_LO = self.read_byte(self.pmic_dev, PMIC_RICHTEK_R3C + 1)
@@ -294,7 +295,7 @@ class MemSmb(SMBus):
             out['vendor'] = vendor 
             
             if vid != 0x0A0C:   # Richtek
-                print(f'ERROR: pmic 0x{vid:04X} not supported')
+                log.error(f'pmic 0x{vid:04X} not supported')
                 return out
             
             val = self.read_byte(self.pmic_dev, PMIC_RICHTEK_R3B)  # PMIC Revision ID
@@ -376,9 +377,9 @@ def find_spd_smbus(check_pci_did = True, check_spd = True):
             if vendorid is not None and vendorid > 0:
                 break
         if not vendorid:
-            print(f'WARN: wrong SMBus port = 0x{g_smb.port:X}  Reason: VendorID = {vendorid}')
+            log.warning(f'wrong SMBus port = 0x{g_smb.port:X}  Reason: VendorID = {vendorid}')
             return False  # Cannot read VendorID from SPD
-        print(f'INFO: SMBus: subsystem vendor = "{smb["subsys_vendor"]}"')
+        log.info(f'SMBus: subsystem vendor = "{smb["subsys_vendor"]}"')
         return True
     
     aux_check = None
@@ -453,7 +454,7 @@ def get_mem_spd_info(slot, mem_info: dict, with_pmic = True):
     print(f'Scan DIMM slot #{slot}')
     vendorid = g_smb.mem_spd_read_reg(SPD5_MR3, 2)  # MR3 + MR4 => Vendor ID
     if not vendorid:
-        print(f'WARN: Cannot read VendorID from SPD#{slot}')
+        log.warning(f'Cannot read VendorID from SPD#{slot}')
         return None
 
     spd_vid = jep106decode(vendorid)
@@ -466,7 +467,7 @@ def get_mem_spd_info(slot, mem_info: dict, with_pmic = True):
 
     val = g_smb.mem_spd_read_reg(SPD5_MR18)  # Device Configuration
     if val is None:
-        print(f'WARN: Cannot read DevConf from SPD#{slot}')
+        log.warning(f'Cannot read DevConf from SPD#{slot}')
         return None
     PEC_EN = get_bits(val, 0, 7)
     #print(f'{PEC_EN=}')
@@ -495,9 +496,9 @@ def get_mem_spd_info(slot, mem_info: dict, with_pmic = True):
     spd['SPD'] = None
 
     spd_data = g_smb.mem_spd_read_full()
-    if spd_data and g_smb.debug:
-        print(f'SPD[{slot}] = {spd_data.hex()}')
-        print(f'SPD len = {len(spd_data)}')
+    if spd_data:
+        log.trace(f'SPD[{slot}] = {spd_data.hex()}')
+        log.trace(f'SPD len = {len(spd_data)}')
     if spd_data and len(spd_data) >= 1024:
         spd['spd_eeprom'] = spd_data.hex()
 
