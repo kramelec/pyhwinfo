@@ -11,6 +11,7 @@ import ctypes as ct
 import ctypes.wintypes as wintypes
 from ctypes import byref
 from types import SimpleNamespace
+import enum
 import json
 
 from datetime import datetime
@@ -79,11 +80,21 @@ SMBAUXCTL_E32B    = 0x02
 
 # =================================================================================================
 
+class IOMODE(enum.IntEnum):
+    def __new__(cls, value, name, doc = None):
+        obj = int.__new__(cls, value)
+        obj._value_ = value
+        obj._name_ = name
+        obj.__doc__ = doc
+        return obj
+    CPUZMODE = 0, "CPUZMODE"
+    LOWLEVEL = 1, "LOWLEVEL"
+
 class SMBus():
     def __init__(self, port):
         self.info = { }
         self.debug = False
-        self.method = 0
+        self.io_mode = IOMODE.CPUZMODE
         self.port = port
         self.sts = 0
         self.status = 0
@@ -92,7 +103,7 @@ class SMBus():
         self.mutex_wait_timeout = 2000
         self.inuse_timeout = 500
         self.lock_status = SMBHSTSTS_INUSE_STS
-        self.init_status = SMBHSTSTS_INUSE_STS # actuality only for method 0
+        self.init_status = SMBHSTSTS_INUSE_STS # actuality only for io_mode = CPUZMODE
         self.wait_intr_timeout = 100
         self.init_mutex()
 
@@ -282,35 +293,35 @@ class SMBus():
     def read_byte(self, dev, command):
         if self.debug:
             print(f'INFO: SMBus: read_byte: dev = 0x{dev:02X}, command = 0x{command:02X} ...')
-        if self.method == 0:
+        if self.io_mode == IOMODE.CPUZMODE:
             return smbus_read_u1(self.port, dev, command, status = self.init_status ^ 0xFF)
         return self.do_command(I2C_READ, SMBHSTCNT_BYTE_DATA, dev, command, None)
 
     def read_word(self, dev, command):
         if self.debug:
             print(f'INFO: SMBus: read_word: dev = 0x{dev:02X}, command = 0x{command:02X} ...')
-        #if self.method == 0:
+        #if self.io_mode == IOMODE.CPUZMODE:
         #    raise NotImplementedError()
         return self.do_command(I2C_READ, SMBHSTCNT_WORD_DATA, dev, command, None)
 
     def write_byte(self, dev, command, value):
         if self.debug:
             print(f'INFO: SMBus: write_byte: dev = 0x{dev:02X}, command = 0x{command:02X}, value = 0x{value:02X} ...')
-        if self.method == 0:
+        if self.io_mode == IOMODE.CPUZMODE:
             return smbus_write_u1(self.port, dev, command, value, status = self.init_status ^ 0xFF)
         return self.do_command(I2C_WRITE, SMBHSTCNT_BYTE_DATA, dev, command, value)
 
     def write_word(self, dev, command, value):
         if self.debug:
             print(f'INFO: SMBus: write_word: dev = 0x{dev:02X}, command = 0x{command:02X}, value = 0x{value:04X} ...')
-        #if self.method == 0:
+        #if self.io_mode == IOMODE.CPUZMODE:
         #    raise NotImplementedError()
         return self.do_command(I2C_WRITE, SMBHSTCNT_WORD_DATA, dev, command, value)
 
     def proc_call(self, dev, command, value):
         if self.debug:
             print(f'INFO: SMBus: proc_call: dev = 0x{dev:02X}, command = 0x{command:02X}, value = 0x{value:04X} ...')
-        if self.method == 0:
+        if self.io_mode == IOMODE.CPUZMODE:
             return smbus_pcall(self.port, dev, command, value, status = self.init_status ^ 0xFF)
         return self.do_command(I2C_READ | I2C_WRITE, SMBHSTCNT_PROC_CALL, dev, command, value)
 

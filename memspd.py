@@ -184,7 +184,7 @@ class MemSmb(SMBus):
         buf = b''
         self.acquire()
         try:
-            size = 1 if self.method == 0 else 2
+            size = 1 if self.io_mode == IOMODE.CPUZMODE else 2
             for spd_page in range(0, 8):
                 rc = self._mem_spd_set_page(spd_page)
                 if not rc:
