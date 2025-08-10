@@ -255,12 +255,27 @@ class SMBus():
             port_write_u1(self.port + SMBHSTSTS, self.status)
         return True
 
-    def do_transaction(self, xact):
+    def do_transaction(self, direction, xact):
         cnt = port_read_u1(self.port + SMBHSTCNT)
         port_write_u1(self.port + SMBHSTCNT, cnt & (SMBHSTCNT_INTREN ^ 0xFF))
 
-        # the current contents of SMBHSTCNT can be overwritten, since PEC, SMBSCMD are passed in xact 
-        port_write_u1(self.port + SMBHSTCNT, SMBHSTCNT_START | xact)
+        if xact == SMBHSTCNT_PROC_CALL and direction == I2C_READ:
+            port_write_u1(self.port + SMBHSTCNT, SMBHSTCNT_PROC_CALL)
+            #delay(10)
+            sts = port_read_u1(self.port + SMBHSTSTS)
+            self.sts = sts
+            if (sts & (STATUS_ERROR_FLAGS | SMBHSTSTS_INTR | SMBHSTSTS_HOST_BUSY)) != 0:
+                port_write_u1(self.port + SMBHSTSTS, sts)
+                sts = port_read_u1(self.port + SMBHSTSTS)
+                self.sts = sts
+                #delay(10)
+            cnt = port_read_u1(self.port + SMBHSTCNT)
+            port_write_u1(self.port + SMBHSTCNT, cnt | SMBHSTCNT_START)
+        else:
+            port_write_u1(self.port + SMBHSTCNT, xact)
+            #delay(10)
+            # the current contents of SMBHSTCNT can be overwritten, since PEC, SMBSCMD are passed in xact 
+            port_write_u1(self.port + SMBHSTCNT, xact | SMBHSTCNT_START)
 
         rc = self.wait_intr()
         if self.timedout:
@@ -306,7 +321,7 @@ class SMBus():
         #port_write_u1(SMBAUXCTL, aux & (SMBAUXCTL_CRC ^ 0xFF))
         
         self.status = 0
-        rc = self.do_transaction(xact)
+        rc = self.do_transaction(direction, xact)
         
         # Some BIOSes don't like it when PEC is enabled at reboot or resume time, so we forcibly disable it after every transaction. Turn off E32B for the same reason.
         #aux = port_read_u1(self.port + SMBAUXCTL)
