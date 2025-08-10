@@ -330,6 +330,10 @@ class SMBus():
 
         return False if direction == I2C_WRITE else None
 
+    def read_BYTE(self, dev):
+        log.debug(f'SMBus: read_BYTE: dev = 0x{dev:02X} ...')
+        return self.do_command(I2C_READ, SMBHSTCNT_BYTE, dev, None, None)
+
     def read_byte(self, dev, command):
         log.debug(f'SMBus: read_byte: dev = 0x{dev:02X}, command = 0x{command:02X} ...')
         if self.io_mode == IOMODE.CPUZMODE:

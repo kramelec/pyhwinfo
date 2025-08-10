@@ -25,6 +25,8 @@ from jep106 import *
 from pci_ids import *
 from smbus import *
 
+from pprint import pprint
+
 # Intel® 700 Series Chipset Family Platform Controller Hub
 # ref: vol1: https://cdrdv2-public.intel.com/743835/743835-004.pdf
 # ref: vol2: https://cdrdv2-public.intel.com/743845/743845_001.pdf
@@ -72,7 +74,8 @@ class MemSmb(SMBus):
     def __init__(self):
         super().__init__(0)
         self.mem_info = None
-        self.slot = 0
+        self.slot_dict = None
+        self.slot = 0  # selected DIMM slot
         self.spd_dev = None
         self.pmic_dev = None
         self.page = None
@@ -81,6 +84,26 @@ class MemSmb(SMBus):
         self.slot = slot
         self.spd_dev = SMBUS_SPD_DEVICE + slot
         self.pmic_dev = SMBUS_PMIC_DEVICE + slot
+
+    def find_all_devices(self):
+        self.acquire()
+        log.change_log_level(log.CRITICAL)
+        try:
+            slot_dict = { }
+            for slot in range(0, 4):
+                self.set_slot(slot)
+                slot_dict[slot] = { }
+                val = self.read_BYTE(self.spd_dev)
+                if val is not None:
+                    slot_dict[slot]['spd_dev'] = self.spd_dev
+                val = self.read_BYTE(self.pmic_dev)
+                if val is not None:
+                    slot_dict[slot]['pmic_dev'] = self.pmic_dev
+            slot_dict = { key: value for key, value in slot_dict.items() if value }
+            return slot_dict
+        finally:
+            log.restore_log_level()
+            self.release()
 
     def _mem_spd_set_page(self, page, check_status = True, ret_status = False):    
         if page < 0 or page >= 8:   # DDR5 SPD has 8 pages
@@ -367,32 +390,29 @@ class MemSmb(SMBus):
 
 def find_spd_smbus(check_pci_did = True, check_spd = True):
     global g_smb
-    
-    def check_spd_vendor(self, smb):
+
+    def find_all_spd_devices(self, smb):
         global g_smb
         g_smb.port = smb['port']
-        vendorid = None
-        for slot in range(0, 4):
-            g_smb.set_slot(slot)
-            vendorid = g_smb.mem_spd_read_reg(SPD5_MR3, 2)  # MR3 + MR4 => Vendor ID
-            if vendorid is not None and vendorid > 0:
-                break
-        if not vendorid:
-            log.warning(f'wrong SMBus port = 0x{g_smb.port:X}  Reason: VendorID = {vendorid}')
-            return False  # Cannot read VendorID from SPD
-        log.info(f'SMBus: subsystem vendor = "{smb["subsys_vendor"]}"')
-        return True
+        slot_dict = g_smb.find_all_devices()
+        print('SMBus devices:')
+        pprint(hex_formatter(slot_dict, '02'))
+        g_smb.slot_dict = slot_dict
+        g_smb.__init_stage = 1
+        return len(slot_dict) > 0
     
-    aux_check = None
-    if check_spd:
-        aux_check = check_spd_vendor
     
+    aux_check = find_all_spd_devices if check_spd else None
     smb = g_smb.find_smbus(check_pci_did = check_pci_did, aux_check = aux_check)
-    if smb:
-        g_smb.info = smb
-        g_smb.__init_stage = 2
-        return smb
-    return None
+    if not smb:
+        if not g_smb.slot_dict:
+            print(f'ERROR: cannot found any SPD/PMIC devices on SMBus 0x{g_smb.port:04X}')
+            return None
+        print(f'ERROR: wrong SMBus port = 0x{g_smb.port:X}')
+        return None
+    g_smb.info = smb
+    g_smb.__init_stage = 2
+    return smb
 
 def CHKBIT(val, bit):
     mask = 1 << bit
@@ -452,6 +472,10 @@ def get_mem_spd_info(slot, mem_info: dict, with_pmic = True):
         return None
 
     g_smb.set_slot(slot)
+    if slot not in g_smb.slot_dict:
+        print(f'Skip DIMM slot #{slot} (Reason: SPD device not founded)')
+        return None
+    
     print(f'Scan DIMM slot #{slot}')
     vendorid = g_smb.mem_spd_read_reg(SPD5_MR3, 2)  # MR3 + MR4 => Vendor ID
     if not vendorid:
