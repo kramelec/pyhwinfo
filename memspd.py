@@ -129,6 +129,7 @@ class MemSmb(SMBus):
             rc = self._mem_spd_set_page(set_page)
             if not rc:
                 return None
+        log.debug(f'_mem_spd_read_reg(0x{reg_offset:02X}) ...')
         return self.read_byte(self.spd_dev, reg_offset)
 
     def mem_spd_read_reg(self, reg_offset, size = 1):

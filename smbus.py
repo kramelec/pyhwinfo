@@ -92,23 +92,38 @@ def _logging_trace(self, message, *args, **kws):
 logging.Logger.trace = _logging_trace
 
 def _change_log_level(self, new_level):
-    current_level = self.getEffectiveLevel()
-    self._saved_log_level = current_level
+    self._prev_log_level = self.getEffectiveLevel()
     self.setLevel(new_level)
-    return current_level
+    return self._prev_log_level
 
 logging.Logger.change_log_level = _change_log_level
     
 def _restore_log_level(self):
-    self.setLevel(self._saved_log_level)
+    if hasattr(self, '_prev_log_level'):
+        if self._prev_log_level is not None:
+            self.setLevel(self._prev_log_level)
+    self._prev_log_level = None
 
 logging.Logger.restore_log_level = _restore_log_level
 
 
-logging.basicConfig(level = logging.WARNING, format='%(levelname)s: %(message)s')
+logging.basicConfig(level = logging.INFO, format='%(levelname)s: %(message)s')
 
 log = logging.getLogger(__name__)
 
+for name, level in logging._nameToLevel.items():
+    setattr(log, name.upper(), level)
+
+
+def hex_formatter(obj, fmt = None):
+    if isinstance(obj, dict):
+        return { k: hex_formatter(v) for k, v in obj.items() }
+    elif isinstance(obj, list):
+        return [ hex_formatter(elem) for elem in obj ]
+    elif isinstance(obj, int):
+        return f'0x{obj:X}' if fmt is None else ('0x%' + fmt + 'X') % obj
+    else:
+        return obj
 
 class IOMODE(enum.IntEnum):
     def __new__(cls, value, name, doc = None):
