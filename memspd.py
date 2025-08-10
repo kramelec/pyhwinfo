@@ -105,16 +105,32 @@ class MemSmb(SMBus):
             log.restore_log_level()
             self.release()
 
+    def init_slots(self):
+        for slot, info in self.slot_dict.items():
+            info['proc_call_allowed'] = True
+            info['is_page_protected'] = False
+
     def _mem_spd_set_page(self, page, check_status = True, ret_status = False):    
         if page < 0 or page >= 8:   # DDR5 SPD has 8 pages
             raise ValueError()    
+        if not self.slot_dict[self.slot]['proc_call_allowed']:
+            if self.slot_dict[self.slot]['is_page_protected']:
+                return False
         # ref: S34HTS08AB_E.pdf   Table 82 Register MR11
         # bit[3] = 0 ==> 1 Byte Addressing for SPD5 Hub Device Memory
-        val = self.proc_call(self.spd_dev, SPD5_MR11, page)
+        val = None
+        if self.slot_dict[self.slot]['proc_call_allowed']:
+            val = self.proc_call(self.spd_dev, SPD5_MR11, page)
         if val is None:
+            if self.slot_dict[self.slot]['proc_call_allowed']:
+                print(f'INFO: SMBus: PROC_CALL method not available for slot #{self.slot}!!!')
+                self.slot_dict[self.slot]['proc_call_allowed'] = False
             rc = self.write_byte(self.spd_dev, SPD5_MR11, page)
             if not rc:
                 log.error(f'_mem_spd_set_page({page}): cannot set page')
+                if not self.slot_dict[self.slot]['is_page_protected']:
+                    print(f'INFO: It is very likely that SPD write protection is enabled for slot #{self.slot}')
+                    self.slot_dict[self.slot]['is_page_protected'] = True
                 return False
         if not check_status and not ret_status:
             return True
@@ -467,6 +483,7 @@ def get_mem_spd_info(slot, mem_info: dict, with_pmic = True):
             print(f'Intel PCH SMBus addr = 0x{smb["port"]:X}')
         g_smb.info["ddr_ver"] = g_smb.mem_info['memory']['mc'][0]['DDR_ver']
         print(f'DDR_ver: {g_smb.info["ddr_ver"]}')
+        g_smb.init_slots()
 
     if not smb['port']:
         return None
