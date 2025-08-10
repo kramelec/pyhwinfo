@@ -338,6 +338,11 @@ def get_undoc_params(tm, info, controller, channel):
         tm["tRFC"] = None
         tm["tRFC2"] = tRFC  # Fine Granularity Refresh mode uses tRFC2 
 
+    if True:
+        tm['tRTP'] = tm['tRDPRE']
+        if tm["tCR"] == '2N': # SubtractOneClock
+            tm['tRTP'] += 1
+
     ''' # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # func "SetTcPreActOdt"
       // tWRPRE is = tCWL + BLn/2 + tWR
       tWRPRE = Timing->tCWL + Outputs->BurstLength + Timing->tWR;
