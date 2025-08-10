@@ -302,15 +302,15 @@ class SMBus():
         else:
             raise RuntimeError(f'Unsupported transaction = 0x{xact:02X}')
 
-        aux = port_read_u1(self.port + SMBAUXCTL)
-        port_write_u1(SMBAUXCTL, aux & (SMBAUXCTL_CRC ^ 0xFF))
+        #aux = port_read_u1(self.port + SMBAUXCTL)
+        #port_write_u1(SMBAUXCTL, aux & (SMBAUXCTL_CRC ^ 0xFF))
         
         self.status = 0
         rc = self.do_transaction(xact)
         
         # Some BIOSes don't like it when PEC is enabled at reboot or resume time, so we forcibly disable it after every transaction. Turn off E32B for the same reason.
-        aux = port_read_u1(self.port + SMBAUXCTL)
-        port_write_u1(self.port + SMBAUXCTL, aux & ((SMBAUXCTL_CRC | SMBAUXCTL_E32B) ^ 0xFF))
+        #aux = port_read_u1(self.port + SMBAUXCTL)
+        #port_write_u1(self.port + SMBAUXCTL, aux & ((SMBAUXCTL_CRC | SMBAUXCTL_E32B) ^ 0xFF))
         
         if not rc:
             log.error(f'do_command: Failed do_transaction: status = 0x{self.sts:02X}')
