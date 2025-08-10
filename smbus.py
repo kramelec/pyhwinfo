@@ -433,7 +433,9 @@ class SMBus():
             offset = 0x40
             HCFG = pci_cfg_read(bus, dev, fun, offset, size = 4)
             if HCFG:
-                smbus['I2C_EN'] = get_bits(HCFG, 0, 2)   # I2C_EN (I2CEN): When this bit is 1, the PCH is enabled to communicate with I2C devices. This will change the formatting of some commands. When this bit is 0, behavior is for SMBus.
+                smbus['I2C_EN']  = get_bits(HCFG, 0, 2)   # I2C_EN (I2CEN): When this bit is 1, the PCH is enabled to communicate with I2C devices. This will change the formatting of some commands. When this bit is 0, behavior is for SMBus.
+                smbus['SSRESET'] = get_bits(HCFG, 0, 3)   # Soft SMBUS Reset: When this bit is 1, the SMbus state machine and logic in PCH is reset. The HW will reset this bit to 0 when reset operation is completed
+                smbus['SPDWD']   = get_bits(HCFG, 0, 4)   # When this bit is set to 1, writes to SMBus addresses 50h – 57h are disabled. Note: This bit is R/WO and will be reset on PLTRST# assertion. This bit should be set by BIOS to ‘1’. Software can only program this bit when both the START bit and Host Busy bit are ‘0’; otherwise, the write may result in undefined behavior.
         return smbus
 
     # https://github.com/memtest86plus/memtest86plus/blob/2f9b165eec4de20ec4b23725c90d3989517ee3fe/system/x86/i2c.c#L80
@@ -462,16 +464,19 @@ class SMBus():
             if smbus_addr is None or did is None:
                 continue
             print(f'Detect SMBus on [{bus:02X}:{dev:02X}:{fun:02X}] addr = 0x{smbus_addr:X}, VID = 0x{vid:04X}, DID = 0x{did:04X}')
-            log.info(f'SMBus MSE = {smb["MSE"]}')
-            if smb['MEMIO_ADDR']:
+            if 'MEMIO_ADDR' in smb and smb['MEMIO_ADDR']:
                 log.info(f'SMBus Mem Addr = 0x{smb["MEMIO_ADDR"]:X}')
+            if 'MSE' in smb:
+                log.info(f'SMBus: MSE = {smb["MSE"]}')
+            if 'SPDWD' in smb:
+                log.info(f'SMBus: I2C_EN = {smb["I2C_EN"]}, SSRESET = {smb["SSRESET"]}, SPDWD = {smb["SPDWD"]}')
             if (smbus_addr & 1) == 0:
                 log.warning(f'Wrong SMBus addr = 0x{smbus_addr:X}')
                 continue  # incorret value
-            if smb['I2C_EN'] == 1:
+            if 'I2C_EN' in smb and smb['I2C_EN'] == 1:
                 log.warning(f'SMBus I2C_EN = 1')
                 continue  # incorret value
-            if smb['IOSE'] == 0: 
+            if 'IOSE' in smb and smb['IOSE'] == 0: 
                 log.warning(f'SMBus IOSE = 0')
                 continue  # incorret value
             if did not in PCI_ID_SMBUS_INTEL and check_pci_did:
