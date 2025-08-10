@@ -93,10 +93,10 @@ class MemSmb(SMBus):
             for slot in range(0, 4):
                 self.set_slot(slot)
                 slot_dict[slot] = { }
-                val = self.read_BYTE(self.spd_dev)
+                val = self.recv_byte(self.spd_dev)
                 if val is not None:
                     slot_dict[slot]['spd_dev'] = self.spd_dev
-                val = self.read_BYTE(self.pmic_dev)
+                val = self.recv_byte(self.pmic_dev)
                 if val is not None:
                     slot_dict[slot]['pmic_dev'] = self.pmic_dev
             slot_dict = { key: value for key, value in slot_dict.items() if value }

@@ -25,6 +25,9 @@ from hardware import *
 from jep106 import *
 from pci_ids import *
 
+# Intel® I/O Controller Hub 9 (ICH9) Family (Rev. 004)
+# https://dn720002.ca.archive.org/0/items/io-controller-hub-9-datasheet/io-controller-hub-9-datasheet.pdf
+
 # Intel® 700 Series Chipset Family Platform Controller Hub
 # ref: vol1: https://cdrdv2-public.intel.com/743835/743835-004.pdf
 # ref: vol2: https://cdrdv2-public.intel.com/743845/743845_001.pdf
@@ -345,9 +348,14 @@ class SMBus():
 
         return False if direction == I2C_WRITE else None
 
-    def read_BYTE(self, dev):
-        log.debug(f'SMBus: read_BYTE: dev = 0x{dev:02X} ...')
+    # ref: io-controller-hub-9-datasheet.pdf   # section: 5.20 SMBus Controller (D31:F3)
+    def recv_byte(self, dev):
+        log.debug(f'SMBus: recv_byte: dev = 0x{dev:02X} ...')
         return self.do_command(I2C_READ, SMBHSTCNT_BYTE, dev, None, None)
+
+    def send_byte(self, dev, value):
+        log.debug(f'SMBus: send_byte: dev = 0x{dev:02X}, value = 0x{value:02X} ...')
+        return self.do_command(I2C_WRITE, SMBHSTCNT_BYTE, dev, value, None)
 
     def read_byte(self, dev, command):
         log.debug(f'SMBus: read_byte: dev = 0x{dev:02X}, command = 0x{command:02X} ...')
