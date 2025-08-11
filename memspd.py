@@ -138,11 +138,11 @@ class MemSmb(SMBus):
         if ret_status:
             return status
         if status is None:
-            log.error(f'SMBus: cannot get status for SPD device = 0x{self.spd_dev:02X}')
+            log.error(f'SMBus: cannot get status (MR48) for SPD device = 0x{self.spd_dev:02X}')
             return False
         status &= 0x7F  # exclude Pending IBI_STATUS = 0x80    # ref: S34HTS08AB_E.pdf (Table 107)
         if status != 0:
-            log.error(f'_mem_spd_set_page: status = 0x{status:02X}')
+            log.error(f'_mem_spd_set_page: SPD MR48 status = 0x{status:02X}')
         return True if status == 0 else False
 
     def _mem_spd_init(self, page):
@@ -155,10 +155,13 @@ class MemSmb(SMBus):
             log.info(f'SMBus: detect Pending IBI_STATUS : status = 0x{status:X}')  # IBI = In Band Interrupt
         return 0
 
-    def _mem_spd_get_status(self, ret_raw = False):
-        status = self._mem_spd_read_reg(SPD5_MR48)  # Device status
-        if status is None:
-            return None
+    def _mem_spd_get_status(self, trynums = 8, ret_raw = False):
+        for trynum in range(0, trynums):
+            status = self._mem_spd_read_reg(SPD5_MR48)  # Device status
+            if status is None:
+                return None
+            if (status & 0x08) == 0:  # check WR_OP_STATUS flag
+                break
         if not ret_raw:
             status &= 0x7F  # exclude Pending IBI_STATUS = 0x80    # ref: S34HTS08AB_E.pdf (Table 107)
         return status
