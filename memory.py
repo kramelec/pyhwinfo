@@ -284,8 +284,8 @@ def get_mchbar_info(info, controller, channel):
         
         tm["DRAM_technology"] = get_bits(data, IMC_SC_GS_CFG, 0, 2)  # UNDOC !!!
 
-        get_undoc_params(tm, info, controller, channel)
         get_mrs_storage(data, tm, info, controller, channel)
+        get_undoc_params(tm, info, controller, channel)
     else:
         raise RuntimeError(f'ERROR: Processor model 0x{cpu_id:X} not supported')
     return tm
@@ -328,10 +328,16 @@ def get_undoc_params(tm, info, controller, channel):
         tm["tWTR_L"] = tm['tWRRD_sg'] - xCWL - info["BurstLength"] - 2
         tm["tWTR_S"] = tm['tWRRD_dg'] - xCWL - info["BurstLength"] - 2
 
-    # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # func "MrcSetupMrcData"
-    tm["FineGranularityRefresh"] = True
-    if tm["REFRESH_HP_WM"] == 4 and tm["REFRESH_PANIC_WM"] == 5:
+    tm["FineGranularityRefresh"] = None
+    if False:
+        # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # func "MrcSetupMrcData"
         tm["FineGranularityRefresh"] = False
+        if tm["REFRESH_HP_WM"] == 4 and tm["REFRESH_PANIC_WM"] == 5:
+            tm["FineGranularityRefresh"] = False
+    
+    if tm['MRS'] and 'MR4' in tm['MRS']:
+        # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # func "Ddr5JedecInitVal"
+        tm["FineGranularityRefresh"] = True if tm['MRS']['MR4']['RefreshTrfcMode'] else False
 
     if info["DDR_TYPE"] == DDR_TYPE.DDR5 and tm["FineGranularityRefresh"] == True:
         tRFC = tm["tRFC"]
