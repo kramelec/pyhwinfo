@@ -400,6 +400,13 @@ def DDR5_ImpedanceDecode(value):
     val_list = [ 34, 40, 48 ]
     return val_list[value] if value < len(val_list) else None
 
+def DDR5_MR4_decode(value):
+    res = { }
+    res['RefreshRate'] = get_bits(value, 0, 0, 2)
+    res['RefreshTrfcMode'] = get_bits(value, 0, 4)
+    res['Tuf'] = get_bits(value, 0, 7)
+    return res
+
 def DDR5_MR5_decode(value):
     res = { }
     res['DataOutputDisable'] = get_bits(value, 0, 0)
@@ -409,6 +416,30 @@ def DDR5_MR5_decode(value):
     res['DM_Enable'] = get_bits(value, 0, 5)
     res['PullDownOutputDriverImpedance'] = DDR5_ImpedanceDecode(get_bits(value, 0, 6, 7))
     return res
+
+def DDR5_MR6_decode(value):
+    RTP_map = [ 12, 14, 15, 17, 18, 20, 21, 23, 24, None, None, None, None, None, None, None ]
+    res = { }
+    res['WriteRecoveryTime'] = 48 + 6 * get_bits(value, 0, 0, 3)
+    res['tRTP'] = RTP_map[get_bits(value, 0, 4, 7)]
+    return res
+
+def DDR5_MR8_decode(value):
+    res = { }
+    res['ReadPreambleSettings']   = get_bits(value, 0, 0, 2)
+    res['WritePreambleSettings']  = get_bits(value, 0, 3, 4)
+    res['ReadPostambleSettings']  = get_bits(value, 0, 6)
+    res['WritePostambleSettings'] = get_bits(value, 0, 7)
+    return res
+
+def DDR5_MR10_decode(value):
+    return VrefPercentDecode( get_bits(value, 0, 0, 7) )
+
+def DDR5_MR11_decode(value):
+    return VrefPercentDecode( get_bits(value, 0, 0, 7) )
+
+def DDR5_MR12_decode(value):
+    return VrefPercentDecode( get_bits(value, 0, 0, 7) )
 
 def DDR5_MR13_decode(value):
     value = value & 0x0F
@@ -601,7 +632,7 @@ def get_mrs_storage(data, tm, info, controller, channel):
                 val = OdtDecode(value & DDR5_MPC_RTT_MASK)
             if vtype == 'Park' and (value & ~DDR5_MPC_RTT_MASK) == DDR5_MPC_SET_RTT_PARK:
                 val = OdtDecode(value & DDR5_MPC_RTT_MASK)
-            if vtype in [ 'MR32', 'MR33' ]:
+            if vtype in [ 'MR4', 'MR5', 'MR6', 'MR8', 'MR10', 'MR11', 'MR12', 'MR32', 'MR33' ]:
                 decode_func = globals()[f'DDR5_{vtype}_decode']
                 val = decode_func(value)
             if val is not None:
@@ -637,6 +668,15 @@ def get_mrs_storage(data, tm, info, controller, channel):
             '?',
             'ParkDqs=RttParkDqs',                # mpcMR33
             'Park=RttPARK',                      # mpcMR34
+            '?',
+            '?',
+            'MR4=MR4',
+            'MR5=MR5',
+            'MR6=MR6',
+            'MR8=MR8',
+            'MR10=VrefDq',
+            'MR11=VrefCa',
+            'MR12=VrefCs',
         ],
         'i12_2x': [
             'MR13=MR13',                         # mpcMR13
@@ -651,6 +691,15 @@ def get_mrs_storage(data, tm, info, controller, channel):
             '?', '?',  #'MR33=MR33#0', 'MR33=MR33#1',         # MR33
             'ParkDqs=RttParkDqs#0', 'ParkDqs=RttParkDqs#1',   # mpcMR33
             'Park=RttPARK#0', 'Park=RttPARK#1',               # mpcMR34
+            '?',
+            '?',
+            'MR4=MR4',
+            'MR5=MR5',
+            'MR6=MR6',
+            'MR8=MR8',
+            'MR10=VrefDq',
+            'MR11=VrefCa',
+            'MR12=VrefCs',
         ],
         'i12_4x': [
             'MR13=MR13',                         # mpcMR13
@@ -665,6 +714,15 @@ def get_mrs_storage(data, tm, info, controller, channel):
             '?', '?', '?', '?', 
             'ParkDqs=RttParkDqs#0', 'ParkDqs=RttParkDqs#1', 'ParkDqs=RttParkDqs#2', 'ParkDqs=RttParkDqs#3',
             'Park=RttPARK#0', 'Park=RttPARK#1', 'Park=RttPARK#2', 'Park=RttPARK#3',
+            '?',
+            '?',
+            'MR4=MR4',
+            'MR5=MR5',
+            'MR6=MR6',
+            'MR8=MR8',
+            'MR10=VrefDq',
+            'MR11=VrefCa',
+            'MR12=VrefCs',
         ],
         'i15': [
             'MR13=MR13#0', 'MR13=MR13#1',        # mpcMR13
@@ -679,6 +737,15 @@ def get_mrs_storage(data, tm, info, controller, channel):
             '?',
             'ParkDqs=RttParkDqs',                # mpcMR33
             'Park=RttPARK',                      # mpcMR34
+            '?',
+            '?',
+            'MR4=MR4',
+            'MR5=MR5',
+            'MR6=MR6',
+            'MR8=MR8',
+            'MR10=VrefDq',
+            'MR11=VrefCa',
+            'MR12=VrefCs',
         ],
     }
     for pname in pattern_Cx_dict:
@@ -700,10 +767,6 @@ def get_mrs_storage(data, tm, info, controller, channel):
         for key, value in rttCx.items():
             mr[key] = value
 
-    if 'i12' in rttCx_pattern and rttCx:
-        MR5_offset = rttCx_start + rttCx_size + 3
-        mr['MR5'] = DDR5_MR5_decode(get_bits(mrs_data, MR5_offset, 0, 7))
-    
     mr["SelectAllPDA"] = get_bits(mrs_data, mrs_size - 1, 0, 7)
 
 def get_mem_ctrl(ctrl_num):
