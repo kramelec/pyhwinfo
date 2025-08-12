@@ -643,6 +643,20 @@ class WindowMemory():
         create_odt_val(odt_cxA_frame, 'A', [ "CA", "CS", "CK" ], wn = 3 )
         create_odt_val(odt_cxB_frame, 'B', [ "CA", "CS", "CK" ], wn = 3 )
 
+        vref_frame = ttk.Frame(timings_frame)
+        vref_frame.pack(fill=tk.BOTH, expand=True, pady=7, padx=3)
+
+        col_timings = [ "VrefDq" ]
+        create_col_timings(col_timings, wn = 6, frame = vref_frame)
+        col_timings = [ "VrefCa" ]
+        create_col_timings(col_timings, wn = 6, frame = vref_frame)
+        col_timings = [ "VrefCs" ]
+        create_col_timings(col_timings, wn = 6, frame = vref_frame)
+        col_timings = [ "PullUpDrv" ]    # PullUpOutputDriverImpedance
+        create_col_timings(col_timings, wn = 9, frame = vref_frame)
+        col_timings = [ "PullDownDrv" ]  # PullDownOutputDriverImpedance
+        create_col_timings(col_timings, wn = 11, frame = vref_frame)
+
         btn_frame = ttk.Frame(main_frame)
         btn_frame.pack(fill=tk.X, pady=3)
 
@@ -918,6 +932,11 @@ class WindowMemory():
             set_odt_val(mrs, 'RttCK_B', "CK_B")
             set_odt_val(mrs, 'RttCS_B', "CS_B")
             set_odt_val(mrs, 'RttCA_B', "CA_B")
+            vv.PullUpDrv.value   = mrs['MR5']['PullUpOutputDriverImpedance']   if 'MR5' in mrs else ''
+            vv.PullDownDrv.value = mrs['MR5']['PullDownOutputDriverImpedance'] if 'MR5' in mrs else ''
+            vv.VrefDq.value = mrs['VrefDq'] if 'VrefDq' in mrs else ''
+            vv.VrefCa.value = mrs['VrefCa'] if 'VrefDq' in mrs else ''
+            vv.VrefCs.value = mrs['VrefCs'] if 'VrefDq' in mrs else ''
 
         validate_timings(self, ci, MCLK_FREQ)
 
