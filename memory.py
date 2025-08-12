@@ -289,18 +289,22 @@ def get_mchbar_info(info, controller, channel):
     return tm
     
 def get_undoc_params(tm, info, controller, channel):
-    global gdict
+    global gdict, cpu_id
     mem = gdict['memory']
     mem_speed = 0
-    if mem['SA']['QCLK_RATIO']:
+    if cpu_id in i12_FAM:
         mem_speed = mem['SA']['QCLK_FREQ'] * 2   # MT/s
-    else:
-        mem_speed = mem['QCLK_FREQ'] * 2   # MT/s
+    if cpu_id in i15_FAM:
+        mem_speed = mem['QCLK_FREQ'] * 2
     mem["Speed"] = round(mem_speed, 2)
     mem["tCKmin"] = None
     # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # file "MrcInterface.h"
     if mem_speed > 0:
         mem["tCKmin"] = round(10**9 / (mem_speed / 2), 2)
+
+    WritePost = None
+    if tm['MRS'] and 'MR8' in tm['MRS']:
+        WritePost = tm['MRS']['MR8']['WritePostambleSettings']
 
     # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # func "MrcSpdProcessing"
     if info["DDR_TYPE"] == DDR_TYPE.DDR4:
@@ -318,6 +322,12 @@ def get_undoc_params(tm, info, controller, channel):
     # tWRRD_dg = Timing->tCWL + BurstLength + tWTR_S + 2 + TatDelta;
     tm["tWTR_L"] = tm['tWRRD_sg'] - tm['tCWL'] - info["BurstLength"] - 2
     tm["tWTR_S"] = tm['tWRRD_dg'] - tm['tCWL'] - info["BurstLength"] - 2
+
+    if cpu_id in (i13_CPU + i14_CPU) and info["DDR_TYPE"] == DDR_TYPE.DDR5 and mem_speed >= 5200:
+        # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # func "SetTcTurnAround"
+        if WritePost is not None:
+            tm["tWTR_L"] -= WritePost
+            tm["tWTR_S"] -= WritePost
     
     if False:  # ASRock Timing Configurator
         xCWL = tm['tCWL']
