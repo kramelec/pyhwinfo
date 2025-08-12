@@ -497,10 +497,12 @@ def get_mrs_storage(data, tm, info, controller, channel):
             mr["OdtlOnRdNtOffset"]  = get_bits(mrs_data, MR37 + 2, 0, 2)
             mr["OdtlOffRdNtOffset"] = get_bits(mrs_data, MR37 + 2, 3, 5)
         MR34 = None
-        for pos in range(MR37 - 1, MR37 - 8, -1):
+        for pos in range(MR37 - 1, MR37 - 12, -1):
+            if pos <= 1:
+                break
             flag = None
             if cpu_id in i12_FAM:
-                flag = get_bits(mrs_data, pos, 6, 7)  # check for 0xC1, 0xC3 ....
+                flag = get_bits(mrs_data, pos, 6, 7)  # check for 0xC1, 0xC3, 0x80 ....
                 if flag:
                     MR34 = pos + 1
                     break
@@ -516,25 +518,26 @@ def get_mrs_storage(data, tm, info, controller, channel):
             mr["RttNomRd"]    = OdtDecode(get_bits(mrs_data, MR35, 3, 5))
             MR36 = MR34 + 2
             mr["RttLoopback"] = OdtDecode(get_bits(mrs_data, MR36, 0, 2))
-        elif MR37 - MR34 == 5:
-            MR34a = MR34
-            MR34b = MR34 + 1
-            mr["RttWr"]     = [ OdtDecode(get_bits(mrs_data, MR34a, 3, 5)), OdtDecode(get_bits(mrs_data, MR34b, 3, 5)) ]
-            mr["RttPark"]   = [ OdtDecode(get_bits(mrs_data, MR34a, 0, 2)), OdtDecode(get_bits(mrs_data, MR34b, 0, 2)) ]
-            MR35a = MR34 + 2
-            MR35b = MR34 + 3
-            mr["RttNomWr"]  = [ OdtDecode(get_bits(mrs_data, MR35a, 0, 2)), OdtDecode(get_bits(mrs_data, MR35b, 0, 2)) ]
-            mr["RttNomRd"]  = [ OdtDecode(get_bits(mrs_data, MR35a, 3, 5)), OdtDecode(get_bits(mrs_data, MR35b, 3, 5)) ]
-            MR36 = MR34 + 4
-            mr["RttLoopback"] = OdtDecode(get_bits(mrs_data, MR36, 0, 2))
-        elif MR37 - MR34 == 3:
-            mr["RttWr"]       = OdtDecode(get_bits(mrs_data, MR34, 3, 5))
-            mr["RttPark"]     = OdtDecode(get_bits(mrs_data, MR34, 0, 2))
-            MR35 = MR34 + 1
-            mr["RttNomWr"]    = OdtDecode(get_bits(mrs_data, MR35, 0, 2))
-            mr["RttNomRd"]    = OdtDecode(get_bits(mrs_data, MR35, 3, 5))
-            MR36 = MR34 + 2
-            mr["RttLoopback"] = OdtDecode(get_bits(mrs_data, MR36, 0, 2))
+        if cpu_id in i12_FAM:
+            xv = MR37 - MR34 - 1
+            if xv >= 2 and (xv % 2) == 0:
+                km = xv // 2
+                MR35 = MR34 + km
+                MR36 = MR35 + km
+                mr["RttWr"] = [ ]
+                mr["RttPark"] = [ ]
+                mr["RttNomWr"] = [ ]
+                mr["RttNomRd"] = [ ]
+                for k in range(0, km):
+                    mr["RttWr"].append   ( OdtDecode(get_bits(mrs_data, MR34 + k, 3, 5)) )
+                    mr["RttPark"].append ( OdtDecode(get_bits(mrs_data, MR34 + k, 0, 2)) )
+                    mr["RttNomWr"].append( OdtDecode(get_bits(mrs_data, MR35 + k, 0, 2)) )
+                    mr["RttNomRd"].append( OdtDecode(get_bits(mrs_data, MR35 + k, 3, 5)) )
+                    pass
+                mr["RttLoopback"] = OdtDecode(get_bits(mrs_data, MR36, 0, 2))
+                for key, val in mr.items():
+                    if isinstance(val, list) and len(val) == 1:
+                        mr[key] = val[0]
         else:
             pass # FIXME
 
