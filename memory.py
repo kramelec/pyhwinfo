@@ -81,7 +81,6 @@ def get_mchbar_info(info, controller, channel):
         if cpu_id in i12_FAM:
             tm["tRPab_ext"] = get_bits(data, IMC_CR_TC_PRE, 8, 12)
             tm["tRDPRE"] = get_bits(data, IMC_CR_TC_PRE, 13, 19)
-            tm["tRTP"] = tm["tRDPRE"]
             tm["tPPD"] = get_bits(data, IMC_CR_TC_PRE, 20, 23)
             tm["tRCDW"] = get_bits(data, IMC_CR_TC_PRE, 24, 31)
             tm["tWRPRE"] = get_bits(data, IMC_CR_TC_PRE, 32, 41)
@@ -91,7 +90,6 @@ def get_mchbar_info(info, controller, channel):
         if cpu_id in i15_FAM:
             tm["tRPab_ext"] = get_bits(data, IMC_CR_TC_PRE, 10, 17)
             tm["tRDPRE"] = get_bits(data, IMC_CR_TC_PRE, 20, 26)
-            tm["tRTP"] = tm["tRDPRE"]
             tm["tPPD"] = get_bits(data, IMC_CR_TC_PRE, 28, 31)
             tm["tWRPRE"] = get_bits(data, IMC_CR_TC_PRE, 33, 42)
             tm["tRAS"] = get_bits(data, IMC_CR_TC_PRE, 45, 53)
@@ -345,8 +343,13 @@ def get_undoc_params(tm, info, controller, channel):
         tm["tRFC2"] = tRFC  # Fine Granularity Refresh mode uses tRFC2 
 
     if True:
+        # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # func "SetTcPreActOdt"
         tm['tRTP'] = tm['tRDPRE']
         if tm["tCR"] == '2N': # SubtractOneClock
+            tm['tRTP'] += 1
+        if tm['tRTP'] in [ 13, 16, 19, 22 ]:
+            # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # func "GetDdr5tRTP"
+            # 13, 16, 19, 22 are not valid values, use the next one
             tm['tRTP'] += 1
 
     ''' # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # func "SetTcPreActOdt"
