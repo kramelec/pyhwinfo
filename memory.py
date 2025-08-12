@@ -561,6 +561,8 @@ def get_mrs_storage(data, tm, info, controller, channel):
         vcount = 0
         res = { }
         mrs = [ get_bits(mrs_data, pos, 0, 7) for pos in range(start, start + plen + 1) ]
+        if len(pattern) >= len(mrs):
+            return 0, res
         for pi, vname in enumerate(pattern):
             value = mrs[pi]
             vtype = vname
@@ -599,10 +601,9 @@ def get_mrs_storage(data, tm, info, controller, channel):
                 val = OdtDecode(value & DDR5_MPC_RTT_MASK)
             if vtype == 'Park' and (value & ~DDR5_MPC_RTT_MASK) == DDR5_MPC_SET_RTT_PARK:
                 val = OdtDecode(value & DDR5_MPC_RTT_MASK)
-            if vtype == 'MR32':
-                val = DDR5_MR32_decode(value)
-            if vtype == 'MR33':
-                val = DDR5_MR33_decode(value)
+            if vtype in [ 'MR32', 'MR33' ]:
+                decode_func = globals()[f'DDR5_{vtype}_decode']
+                val = decode_func(value)
             if val is not None:
                 vcount += 1
                 if idx is not None:
@@ -623,7 +624,7 @@ def get_mrs_storage(data, tm, info, controller, channel):
     rttCx_pattern = ''
     rttCx = None
     pattern_Cx_dict = {
-        'Cx_new': [
+        'i12_1x': [
             'MR13=MR13',                         # mpcMR13
             'mpcSetCmdTiming=CmdTiming',         # mpcSetCmdTiming
             'CKa=RttCK_A',                       # mpcMR32a0
@@ -637,7 +638,7 @@ def get_mrs_storage(data, tm, info, controller, channel):
             'ParkDqs=RttParkDqs',                # mpcMR33
             'Park=RttPARK',                      # mpcMR34
         ],
-        'Cx_newLong': [
+        'i12_2x': [
             'MR13=MR13',                         # mpcMR13
             'mpcSetCmdTiming=CmdTiming',         # mpcSetCmdTiming
             'CKa=RttCK_A#0', 'CKa=RttCK_A#1',    # mpcMR32a0
@@ -650,6 +651,20 @@ def get_mrs_storage(data, tm, info, controller, channel):
             '?', '?',  #'MR33=MR33#0', 'MR33=MR33#1',         # MR33
             'ParkDqs=RttParkDqs#0', 'ParkDqs=RttParkDqs#1',   # mpcMR33
             'Park=RttPARK#0', 'Park=RttPARK#1',               # mpcMR34
+        ],
+        'i12_4x': [
+            'MR13=MR13',                         # mpcMR13
+            'mpcSetCmdTiming=CmdTiming',         # mpcSetCmdTiming
+            'CKa=RttCK_A#0', 'CKa=RttCK_A#1', 'CKa=RttCK_A#2', 'CKa=RttCK_A#3',
+            'CSa=RttCS_A#0', 'CSa=RttCS_A#1', 'CSa=RttCS_A#2', 'CSa=RttCS_A#3',
+            'CAa=RttCA_A#0', 'CAa=RttCA_A#1', 'CAa=RttCA_A#2', 'CAa=RttCA_A#3',
+            'CKb=RttCK_B#0', 'CKb=RttCK_B#1', 'CKb=RttCK_B#2', 'CKb=RttCK_B#3',
+            'CSb=RttCS_B#0', 'CSb=RttCS_B#1', 'CSb=RttCS_B#2', 'CSb=RttCS_B#3',
+            'CAb=RttCA_B#0', 'CAb=RttCA_B#1', 'CAb=RttCA_B#2', 'CAb=RttCA_B#3',
+            '?', '?', '?', '?',
+            '?', '?', '?', '?', 
+            'ParkDqs=RttParkDqs#0', 'ParkDqs=RttParkDqs#1', 'ParkDqs=RttParkDqs#2', 'ParkDqs=RttParkDqs#3',
+            'Park=RttPARK#0', 'Park=RttPARK#1', 'Park=RttPARK#2', 'Park=RttPARK#3',
         ],
         'i15': [
             'MR13=MR13#0', 'MR13=MR13#1',        # mpcMR13
@@ -666,7 +681,15 @@ def get_mrs_storage(data, tm, info, controller, channel):
             'Park=RttPARK',                      # mpcMR34
         ],
     }
+    for pname in pattern_Cx_dict:
+        if cpu_id in i12_FAM and not pname.startswith('i12') :
+            pattern_Cx_dict[pname] = None
+        if cpu_id in i15_FAM and not pname.startswith('i15') :
+            pattern_Cx_dict[pname] = None
+
     for pname, pattern in pattern_Cx_dict.items():
+        if not pattern:
+            continue
         sz, res = rttCx_check_and_read(rttCx_start, pattern)
         if sz == len(pattern):
             rttCx = res
@@ -677,7 +700,7 @@ def get_mrs_storage(data, tm, info, controller, channel):
         for key, value in rttCx.items():
             mr[key] = value
 
-    if rttCx_pattern == 'Cx_newLong' and rttCx:
+    if 'i12' in rttCx_pattern and rttCx:
         MR5_offset = rttCx_start + rttCx_size + 3
         mr['MR5'] = DDR5_MR5_decode(get_bits(mrs_data, MR5_offset, 0, 7))
     
