@@ -13,7 +13,7 @@ Python module for retrieving hardware information
 
 ## GUI Preview
 
-<img width="687" height="971" alt="image" src="https://github.com/user-attachments/assets/65101f5f-17de-4761-9d73-1321ff7faf2b" />
+<img width="691" height="988" alt="image" src="https://github.com/user-attachments/assets/b929f2ab-988b-4ba2-aded-0f1d0e714940" />
 
 ## Current restrictions
 
