@@ -155,7 +155,9 @@ class MemSmb(SMBus):
             log.info(f'SMBus: detect Pending IBI_STATUS : status = 0x{status:X}')  # IBI = In Band Interrupt
         return 0
 
-    def _mem_spd_get_status(self, trynums = 8, ret_raw = False):
+    def _mem_spd_get_status(self, trynums = None, ret_raw = False):
+        if not trynums:
+            trynums = 8 if self.io_mode == IOMODE.LOWLEVEL else 20
         for trynum in range(0, trynums):
             status = self._mem_spd_read_reg(SPD5_MR48)  # Device status
             if status is None:
