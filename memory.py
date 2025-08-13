@@ -473,10 +473,10 @@ def DDR5_MR10_decode(value):
     return VrefPercentDecode( get_bits(value, 0, 0, 7) )
 
 def DDR5_MR11_decode(value):
-    return VrefPercentDecode( get_bits(value, 0, 0, 7) )
+    return VrefPercentDecode( get_bits(value, 0, 0, 7) & 0x7F )
 
 def DDR5_MR12_decode(value):
-    return VrefPercentDecode( get_bits(value, 0, 0, 7) )
+    return VrefPercentDecode( get_bits(value, 0, 0, 7) & 0x7F )
 
 def DDR5_MR13_decode(value):
     value = value & 0x0F
