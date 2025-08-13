@@ -588,6 +588,10 @@ def get_mrs_storage(data, tm, info, controller, channel):
                 for key, val in mr.items():
                     if isinstance(val, list) and len(val) == 1:
                         mr[key] = val[0]
+            MR40 = MR37 + 3
+            MR45 = MR40 + 1
+            MR10 = MR45 + 1
+            mr["VrefDq"] = DDR5_MR10_decode(get_bits(mrs_data, MR10, 0, 7))
         else:
             pass # FIXME
 
@@ -623,11 +627,11 @@ def get_mrs_storage(data, tm, info, controller, channel):
             if '#' in name:
                 name, idx = name.split('#')
                 idx = int(idx)
-            val = None
+            val = '_SKIP_'
             if vtype == '?':
                 vcount += 1
                 continue
-            if vtype == 'MR13' and (value & 0xF0) == DDR5_MPC_CFG_TDLLK_TCCD_L:
+            if vtype == 'mpcMR13' and (value & 0xF0) == DDR5_MPC_CFG_TDLLK_TCCD_L:
                 val = DDR5_MR13_decode(value)
             if vtype == 'mpcSetCmdTiming':
                 val = ''
@@ -654,7 +658,7 @@ def get_mrs_storage(data, tm, info, controller, channel):
             if vtype in [ 'MR4', 'MR5', 'MR6', 'MR8', 'MR10', 'MR11', 'MR12', 'MR32', 'MR33' ]:
                 decode_func = globals()[f'DDR5_{vtype}_decode']
                 val = decode_func(value)
-            if val is not None:
+            if val != '_SKIP_':
                 vcount += 1
                 if idx is not None:
                     if name not in res:
@@ -675,7 +679,7 @@ def get_mrs_storage(data, tm, info, controller, channel):
     rttCx = None
     pattern_Cx_dict = {
         'i12_1x': [
-            'MR13=MR13',                         # mpcMR13
+            'mpcMR13=MR13',                      # mpcMR13
             'mpcSetCmdTiming=CmdTiming',         # mpcSetCmdTiming
             'CKa=RttCK_A',                       # mpcMR32a0
             'CSa=RttCS_A',                       # mpcMR32a1
@@ -683,8 +687,8 @@ def get_mrs_storage(data, tm, info, controller, channel):
             'CKb=RttCK_B',                       # mpcMR32b0
             'CSb=RttCS_B',                       # mpcMR32b1
             'CAb=RttCA_B',                       # mpcMR33b0
-            '?',
-            '?',
+            'MR11=VrefCa',
+            'MR12=VrefCs',
             'ParkDqs=RttParkDqs',                # mpcMR33
             'Park=RttPARK',                      # mpcMR34
             '?',
@@ -698,7 +702,7 @@ def get_mrs_storage(data, tm, info, controller, channel):
             'MR12=VrefCs',
         ],
         'i12_2x': [
-            'MR13=MR13',                         # mpcMR13
+            'mpcMR13=MR13',                      # mpcMR13
             'mpcSetCmdTiming=CmdTiming',         # mpcSetCmdTiming
             'CKa=RttCK_A#0', 'CKa=RttCK_A#1',    # mpcMR32a0
             'CSa=RttCS_A#0', 'CSa=RttCS_A#1',    # mpcMR32a1
@@ -706,8 +710,8 @@ def get_mrs_storage(data, tm, info, controller, channel):
             'CKb=RttCK_B#0', 'CKb=RttCK_B#1',    # mpcMR32b0
             'CSb=RttCS_B#0', 'CSb=RttCS_B#1',    # mpcMR32b1
             'CAb=RttCA_B#0', 'CAb=RttCA_B#1',    # mpcMR33b0
-            '?', '?',  #'MR32=MR32#0', 'MR32=MR32#1',         # MR32
-            '?', '?',  #'MR33=MR33#0', 'MR33=MR33#1',         # MR33
+            'MR11=VrefCa#0', 'MR11=VrefCa#1',
+            'MR12=VrefCs#0', 'MR12=VrefCs#1',
             'ParkDqs=RttParkDqs#0', 'ParkDqs=RttParkDqs#1',   # mpcMR33
             'Park=RttPARK#0', 'Park=RttPARK#1',               # mpcMR34
             '?',
@@ -716,12 +720,9 @@ def get_mrs_storage(data, tm, info, controller, channel):
             'MR5=MR5',
             'MR6=MR6',
             'MR8=MR8',
-            'MR10=VrefDq',
-            'MR11=VrefCa',
-            'MR12=VrefCs',
         ],
         'i12_4x': [
-            'MR13=MR13',                         # mpcMR13
+            'mpcMR13=MR13',                      # mpcMR13
             'mpcSetCmdTiming=CmdTiming',         # mpcSetCmdTiming
             'CKa=RttCK_A#0', 'CKa=RttCK_A#1', 'CKa=RttCK_A#2', 'CKa=RttCK_A#3',
             'CSa=RttCS_A#0', 'CSa=RttCS_A#1', 'CSa=RttCS_A#2', 'CSa=RttCS_A#3',
@@ -729,8 +730,8 @@ def get_mrs_storage(data, tm, info, controller, channel):
             'CKb=RttCK_B#0', 'CKb=RttCK_B#1', 'CKb=RttCK_B#2', 'CKb=RttCK_B#3',
             'CSb=RttCS_B#0', 'CSb=RttCS_B#1', 'CSb=RttCS_B#2', 'CSb=RttCS_B#3',
             'CAb=RttCA_B#0', 'CAb=RttCA_B#1', 'CAb=RttCA_B#2', 'CAb=RttCA_B#3',
-            '?', '?', '?', '?',
-            '?', '?', '?', '?', 
+            'MR11=VrefCa#0', 'MR11=VrefCa#1', 'MR11=VrefCa#2', 'MR11=VrefCa#3',
+            'MR12=VrefCs#0', 'MR12=VrefCs#1', 'MR12=VrefCs#2', 'MR12=VrefCs#3',
             'ParkDqs=RttParkDqs#0', 'ParkDqs=RttParkDqs#1', 'ParkDqs=RttParkDqs#2', 'ParkDqs=RttParkDqs#3',
             'Park=RttPARK#0', 'Park=RttPARK#1', 'Park=RttPARK#2', 'Park=RttPARK#3',
             '?',
@@ -744,7 +745,7 @@ def get_mrs_storage(data, tm, info, controller, channel):
             'MR12=VrefCs',
         ],
         'i15': [
-            'MR13=MR13#0', 'MR13=MR13#1',        # mpcMR13
+            'mpcMR13=MR13#0', 'mpcMR13=MR13#1',  # mpcMR13
             'mpcSetCmdTiming=CmdTiming',         # mpcSetCmdTiming
             'CKa=RttCK_A',                       # mpcMR32a0
             'CSa=RttCS_A',                       # mpcMR32a1
@@ -752,8 +753,8 @@ def get_mrs_storage(data, tm, info, controller, channel):
             'CKb=RttCK_B',                       # mpcMR32b0
             'CSb=RttCS_B',                       # mpcMR32b1
             'CAb=RttCA_B',                       # mpcMR33b0
-            '?',
-            '?',
+            'MR11=VrefCa',
+            'MR12=VrefCs',
             'ParkDqs=RttParkDqs',                # mpcMR33
             'Park=RttPARK',                      # mpcMR34
             '?',

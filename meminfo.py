@@ -897,6 +897,13 @@ class WindowMemory():
         vv.N_TO_1_RATIO.value = ci['N_TO_1_RATIO'] if 'N_TO_1_RATIO' in ci else ''
         vv.ADD_1QCLK_DELAY.value = ci['ADD_1QCLK_DELAY'] if 'ADD_1QCLK_DELAY' in ci else ''
 
+        def get_first_value(value, none_as = ''):
+            if isinstance(value, list) and len(value) > 0:
+                value = value[0] if len(value) > 0 else None
+            if value is None and none_as is not None:
+                return none_as
+            return value
+
         def set_odt_val(mrs, mrs_name, name):
             vv = self.vars
             vvname0 = 'ODT_' + name + '__0'
@@ -934,9 +941,9 @@ class WindowMemory():
             set_odt_val(mrs, 'RttCA_B', "CA_B")
             vv.PullUpDrv.value   = mrs['MR5']['PullUpOutputDriverImpedance']   if 'MR5' in mrs else ''
             vv.PullDownDrv.value = mrs['MR5']['PullDownOutputDriverImpedance'] if 'MR5' in mrs else ''
-            vv.VrefDq.value = mrs['VrefDq'] if 'VrefDq' in mrs else ''
-            vv.VrefCa.value = mrs['VrefCa'] if 'VrefDq' in mrs else ''
-            vv.VrefCs.value = mrs['VrefCs'] if 'VrefDq' in mrs else ''
+            vv.VrefDq.value = get_first_value(mrs['VrefDq']) if 'VrefDq' in mrs else ''
+            vv.VrefCa.value = get_first_value(mrs['VrefCa']) if 'VrefCa' in mrs else ''
+            vv.VrefCs.value = get_first_value(mrs['VrefCs']) if 'VrefCs' in mrs else ''
 
         validate_timings(self, ci, MCLK_FREQ)
 
