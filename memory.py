@@ -419,6 +419,24 @@ def DDR5_ImpedanceDecode(value):
     val_list = [ 34, 40, 48 ]
     return val_list[value] if value < len(val_list) else None
 
+def DDR5_MR0_decode(value):
+    res = { }
+    BL_map = [ 'BL16', 'BC8 OTF', 'BL32', 'BL32 OTF' ]
+    res['BurstLength'] = BL_map[get_bits(value, 0, 0, 1)]
+    res['CasLatency'] = 22 + 2 * get_bits(value, 0, 2, 6)
+    return res
+
+def DDR5_MR2_decode(value):
+    res = { }
+    res['ReadPreambleTraining']  = get_bits(value, 0, 0)
+    res['WriteLevelingTraining'] = get_bits(value, 0, 1)
+    res['Mode1n']                = get_bits(value, 0, 2)
+    res['MaxPowerSavingsMode']   = get_bits(value, 0, 3)
+    res['CsAssertionDuration']   = get_bits(value, 0, 4)
+    res['Device15Mpsm']          = get_bits(value, 0, 5)
+    res['InternalWriteTiming']   = get_bits(value, 0, 7)
+    return res
+
 def DDR5_MR4_decode(value):
     res = { }
     res['RefreshRate'] = get_bits(value, 0, 0, 2)
@@ -482,6 +500,17 @@ def DDR5_MR13_decode(value):
     if value >= len(mr13_table):
         return None
     return mr13_table[value]
+
+def DDR5_MR14_decode(value):
+    res = { }
+    res['Cid0'] = get_bits(value, 0, 0)
+    res['Cid1'] = get_bits(value, 0, 1)
+    res['Cid2'] = get_bits(value, 0, 2)
+    res['Cid3'] = get_bits(value, 0, 3)
+    res['RowMode_CodeWordMode'] = get_bits(value, 0, 5)
+    res['ResetEcsCounter']      = get_bits(value, 0, 6)
+    res['EcsMode']              = get_bits(value, 0, 7)
+    return res
 
 def DDR5_MR32_decode(value):
     res = { }
@@ -655,7 +684,7 @@ def get_mrs_storage(data, tm, info, controller, channel):
                 val = OdtDecode(value & DDR5_MPC_RTT_MASK)
             if vtype == 'Park' and (value & ~DDR5_MPC_RTT_MASK) == DDR5_MPC_SET_RTT_PARK:
                 val = OdtDecode(value & DDR5_MPC_RTT_MASK)
-            if vtype in [ 'MR4', 'MR5', 'MR6', 'MR8', 'MR10', 'MR11', 'MR12', 'MR32', 'MR33' ]:
+            if vtype in [ 'MR0', 'MR2', 'MR4', 'MR5', 'MR6', 'MR8', 'MR10', 'MR11', 'MR12', 'MR13', 'MR14', 'MR32', 'MR33' ]:
                 decode_func = globals()[f'DDR5_{vtype}_decode']
                 val = decode_func(value)
             if val != '_SKIP_':
@@ -691,15 +720,14 @@ def get_mrs_storage(data, tm, info, controller, channel):
             'MR12=VrefCs',
             'ParkDqs=RttParkDqs',                # mpcMR33
             'Park=RttPARK',                      # mpcMR34
-            '?',
-            '?',
+            'MR0=MR0',
+            'MR2=MR2',
             'MR4=MR4',
             'MR5=MR5',
             'MR6=MR6',
             'MR8=MR8',
-            'MR10=VrefDq',
-            'MR11=VrefCa',
-            'MR12=VrefCs',
+            'MR13=mr13',
+            'MR14=MR14',
         ],
         'i12_2x': [
             'mpcMR13=MR13',                      # mpcMR13
@@ -714,12 +742,14 @@ def get_mrs_storage(data, tm, info, controller, channel):
             'MR12=VrefCs#0', 'MR12=VrefCs#1',
             'ParkDqs=RttParkDqs#0', 'ParkDqs=RttParkDqs#1',   # mpcMR33
             'Park=RttPARK#0', 'Park=RttPARK#1',               # mpcMR34
-            '?',
-            '?',
+            'MR0=MR0',
+            'MR2=MR2',
             'MR4=MR4',
             'MR5=MR5',
             'MR6=MR6',
             'MR8=MR8',
+            'MR13=mr13',
+            'MR14=MR14',
         ],
         'i12_4x': [
             'mpcMR13=MR13',                      # mpcMR13
@@ -734,15 +764,14 @@ def get_mrs_storage(data, tm, info, controller, channel):
             'MR12=VrefCs#0', 'MR12=VrefCs#1', 'MR12=VrefCs#2', 'MR12=VrefCs#3',
             'ParkDqs=RttParkDqs#0', 'ParkDqs=RttParkDqs#1', 'ParkDqs=RttParkDqs#2', 'ParkDqs=RttParkDqs#3',
             'Park=RttPARK#0', 'Park=RttPARK#1', 'Park=RttPARK#2', 'Park=RttPARK#3',
-            '?',
-            '?',
+            'MR0=MR0',
+            'MR2=MR2',
             'MR4=MR4',
             'MR5=MR5',
             'MR6=MR6',
             'MR8=MR8',
-            'MR10=VrefDq',
-            'MR11=VrefCa',
-            'MR12=VrefCs',
+            'MR13=mr13',
+            'MR14=MR14',
         ],
         'i15': [
             'mpcMR13=MR13#0', 'mpcMR13=MR13#1',  # mpcMR13
@@ -757,15 +786,14 @@ def get_mrs_storage(data, tm, info, controller, channel):
             'MR12=VrefCs',
             'ParkDqs=RttParkDqs',                # mpcMR33
             'Park=RttPARK',                      # mpcMR34
-            '?',
-            '?',
+            'MR0=MR0',
+            'MR2=MR2',
             'MR4=MR4',
             'MR5=MR5',
             'MR6=MR6',
             'MR8=MR8',
-            'MR10=VrefDq',
-            'MR11=VrefCa',
-            'MR12=VrefCs',
+            'MR13=mr13',
+            'MR14=MR14',
         ],
     }
     for pname in pattern_Cx_dict:
