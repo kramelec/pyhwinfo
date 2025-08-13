@@ -638,8 +638,8 @@ class WindowMemory():
         col_timings = [ "oref_ri", "tZQOPER", "tMOD", ]
         create_col_timings(col_timings, wn = 7, frame = ext_timings_frame)
 
-        col_timings = [ "X8_DEVICE" , "N_TO_1_RATIO", "ADD_1QCLK_DELAY", ]
-        create_col_timings(col_timings, wn = 15, frame = ext_timings_frame)
+        col_timings = [ "X8_DEVICE" , "PullUpDrv", "PullDownDrv", ]
+        create_col_timings(col_timings, wn = 11, frame = ext_timings_frame)
 
         # ODT section
         odt_frame = ttk.Frame(timings_frame)
@@ -653,6 +653,9 @@ class WindowMemory():
 
         odt_cxB_frame = ttk.LabelFrame(odt_frame, text="ODT Cfg Group B", style='Section.TLabelframe')
         odt_cxB_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=2, padx=3)
+
+        odt_vref_frame = ttk.LabelFrame(odt_frame, text="Vref", style='Section.TLabelframe')
+        odt_vref_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=2, padx=3)
 
         def create_odt_val(frame, group, tlist, wn = 8, wv = 4):
             nonlocal vv
@@ -679,20 +682,7 @@ class WindowMemory():
         create_odt_val(odt_rtt_frame, None, [ "NomRd", "NomWr", "Loopback" ], wn = 8 )
         create_odt_val(odt_cxA_frame, 'A', [ "CA", "CS", "CK" ], wn = 3 )
         create_odt_val(odt_cxB_frame, 'B', [ "CA", "CS", "CK" ], wn = 3 )
-
-        vref_frame = ttk.Frame(timings_frame)
-        vref_frame.pack(fill=tk.BOTH, expand=True, pady=7, padx=3)
-
-        col_timings = [ "VrefDq" ]
-        create_col_timings(col_timings, wn = 6, frame = vref_frame)
-        col_timings = [ "VrefCa" ]
-        create_col_timings(col_timings, wn = 6, frame = vref_frame)
-        col_timings = [ "VrefCs" ]
-        create_col_timings(col_timings, wn = 6, frame = vref_frame)
-        col_timings = [ "PullUpDrv" ]    # PullUpOutputDriverImpedance
-        create_col_timings(col_timings, wn = 9, frame = vref_frame)
-        col_timings = [ "PullDownDrv" ]  # PullDownOutputDriverImpedance
-        create_col_timings(col_timings, wn = 11, frame = vref_frame)
+        create_odt_val(odt_vref_frame, 'V', [ "CA", "CS", "Dq" ], wn = 3 )
 
         btn_frame = ttk.Frame(main_frame)
         btn_frame.pack(fill=tk.X, pady=3)
@@ -931,8 +921,6 @@ class WindowMemory():
         vv.tZQOPER.value = ci['tZQOPER'] if 'tZQOPER' in ci else ''
         vv.tMOD.value = ci['tMOD'] if 'tMOD' in ci else ''
         vv.X8_DEVICE.value = ci['X8_DEVICE'] if 'X8_DEVICE' in ci else ''
-        vv.N_TO_1_RATIO.value = ci['N_TO_1_RATIO'] if 'N_TO_1_RATIO' in ci else ''
-        vv.ADD_1QCLK_DELAY.value = ci['ADD_1QCLK_DELAY'] if 'ADD_1QCLK_DELAY' in ci else ''
 
         def get_first_value(value, none_as = ''):
             if isinstance(value, list) and len(value) > 0:
@@ -976,11 +964,11 @@ class WindowMemory():
             set_odt_val(mrs, 'RttCK_B', "CK_B")
             set_odt_val(mrs, 'RttCS_B', "CS_B")
             set_odt_val(mrs, 'RttCA_B', "CA_B")
+            set_odt_val(mrs, 'VrefCa', "CA_V")
+            set_odt_val(mrs, 'VrefCs', "CS_V")
+            set_odt_val(mrs, 'VrefDq', "Dq_V")
             vv.PullUpDrv.value   = mrs['MR5']['PullUpOutputDriverImpedance']   if 'MR5' in mrs else ''
             vv.PullDownDrv.value = mrs['MR5']['PullDownOutputDriverImpedance'] if 'MR5' in mrs else ''
-            vv.VrefDq.value = get_first_value(mrs['VrefDq']) if 'VrefDq' in mrs else ''
-            vv.VrefCa.value = get_first_value(mrs['VrefCa']) if 'VrefCa' in mrs else ''
-            vv.VrefCs.value = get_first_value(mrs['VrefCs']) if 'VrefCs' in mrs else ''
 
         validate_timings(self, ci, MCLK_FREQ)
 
