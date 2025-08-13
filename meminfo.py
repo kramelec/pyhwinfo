@@ -5,6 +5,7 @@
 import sys
 import json
 import types
+import ctypes
 import math
 
 import tkinter as tk
@@ -102,6 +103,7 @@ class WindowMemory():
         load_extrafont(self.root)
         self.root.title(win_caption)
         self.root.resizable(False, False)
+        self.init_screen()
         self.init_styles()
         self.vars = types.SimpleNamespace()
         self.test = False
@@ -111,22 +113,56 @@ class WindowMemory():
         self.m_inf = mem_helpers.m_inf
         self.mlc_tool = MLCTool(self.root)
         self.mlc_dialog = None
+
+    def init_screen(self):
+        ctypes.windll.user32.SetProcessDPIAware()
+        
+    def get_screen_size(self):   
+        user32 = ctypes.windll.user32
+        width  = user32.GetSystemMetrics(0)
+        height = user32.GetSystemMetrics(1)
+        return width, height
         
     def init_styles(self):
         try:
             self.root.load_font("styles/IntelOneMono-Medium.ttf")
         except:
             pass  # Continue if font loading fails
+        screen_size = self.get_screen_size()
+        print(f'{screen_size=}')
+        scr_h = screen_size[1]
+        if scr_h <= 900:
+            fs8 = 5
+            fs9 = 6
+            fs10 = 7
+        elif scr_h <= 1000:
+            fs8 = 6
+            fs9 = 7
+            fs10 = 8
+        elif scr_h <= 1100:
+            fs8 = 7
+            fs9 = 8
+            fs10 = 9
+        else:
+            fs8 = 8
+            fs9 = 9
+            fs10 = 10
+        
+        self.fs8 = fs8
+        self.fs9 = fs9
+        self.fs10 = fs10
+            
         style = ttk.Style()
-        style.configure('Title.TLabel', font=('Segoe UI', 10))
-        style.configure("TRadiobutton", font=('Segoe UI', 10))
-        style.configure('Section.TLabelframe.Label', font=('Segoe UI', 9))
-        style.configure('Value.TLabel', font=('Consolas', 10))
-        style.configure('val.TLabel', font=('Consolas', 10), padding=1, background="white", foreground="black", relief="groove", borderwidth=2)
-        style.configure('Small.TLabel', font=('Consolas', 8))
+        style.configure('Title.TLabel', font=('Segoe UI', fs10))
+        style.configure("TRadiobutton", font=('Segoe UI', fs10))
+        style.configure("TCombobox", font=('Segoe UI', fs10))
+        style.configure('Section.TLabelframe.Label', font=('Segoe UI', fs9))
+        style.configure('Value.TLabel', font=('Consolas', fs10))
+        style.configure('val.TLabel', font=('Consolas', fs10), padding=1, background="white", foreground="black", relief="groove", borderwidth=2)
+        style.configure('Small.TLabel', font=('Consolas', fs8))
 
-        xfont = ('Intel One Mono Medium', 10)
-        ufont = ('Segoe UI', 10)
+        xfont = ('Intel One Mono Medium', fs10)
+        ufont = ('Segoe UI', fs10)
 
         style.configure('fixT.TLabel',         font=xfont, padding=0)
         style.configure('fixV.TLabel',         font=xfont, padding=0, background="white",   foreground="black", relief="groove", borderwidth=2)
@@ -163,13 +199,13 @@ class WindowMemory():
         cpu_label.pack(side=tk.LEFT, padx = 5, pady = 1)
         
         # Add advanced info button with info icon
-        info_btn = tk.Button(cpu_frame, text="ℹ", font=("Segoe UI", 10, "bold"), 
+        info_btn = tk.Button(cpu_frame, text="ℹ", font=("Segoe UI", self.fs10, "bold"), 
                             bg="#4CAF50", fg="white", width=3, height=1,
                             command=self.advanced_tooltip.show_advanced_info,
                             relief=tk.RAISED, borderwidth=2, cursor="hand2")
         info_btn.pack(side=tk.RIGHT, padx=3, pady=0)
 
-        cap_btn = tk.Button(cpu_frame, text="📷", font=("Segoe UI", 10, "bold"), 
+        cap_btn = tk.Button(cpu_frame, text="📷", font=("Segoe UI", self.fs10, "bold"), 
                             bg="#4CAF50", fg="white", width=3, height=1,
                             command=self.take_screenshot,
                             relief=tk.RAISED, borderwidth=2, cursor="hand2")
@@ -215,7 +251,8 @@ class WindowMemory():
             vstyle3 = 'val.TLabel' if size else 'Title.TLabel'
             frame = ttk.Frame(dimm_frame2)
             frame.pack(fill=tk.X, pady=1)
-            radio_btn = tk.Radiobutton(frame, text=slot, variable=vv.dimm_radio, value=str(dnum), command=self.on_radio_select)
+            font = ('Segoe UI', self.fs10)
+            radio_btn = tk.Radiobutton(frame, text=slot, font=font, variable=vv.dimm_radio, value=str(dnum), command=self.on_radio_select)
             radio_btn.pack(side=tk.LEFT)
             if not size:
                 radio_btn.config(state = tk.DISABLED)
@@ -455,7 +492,7 @@ class WindowMemory():
                     options.append( f'MC #{mc_num}, CH #{ch_num}' )
                     if mc_num == self.current_mc and ch_num == self.current_ch:
                         item_active = len(options) - 1
-            vv.mc_ch_combobox = ttk.Combobox(frame, values=options, width = width + 2)
+            vv.mc_ch_combobox = ttk.Combobox(frame, values=options, width = width + 2, font = ('Segoe UI', self.fs10))
             vv.mc_ch_combobox.pack(side=tk.LEFT, padx = 1)
             vv.mc_ch_combobox.current(item_active)
             vv.mc_ch_combobox.pack()
