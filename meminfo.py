@@ -154,8 +154,8 @@ class WindowMemory():
             
         style = ttk.Style()
         style.configure('Title.TLabel', font=('Segoe UI', fs10))
-        style.configure("TRadiobutton", font=('Segoe UI', fs10))
-        style.configure("TCombobox", font=('Segoe UI', fs10))
+        style.configure("TRadiobutton", font=('Segoe UI', fs9))
+        style.configure("TCombobox", font=('Segoe UI', fs9))
         style.configure('Section.TLabelframe.Label', font=('Segoe UI', fs9))
         style.configure('Value.TLabel', font=('Consolas', fs10))
         style.configure('val.TLabel', font=('Consolas', fs10), padding=1, background="white", foreground="black", relief="groove", borderwidth=2)
@@ -251,7 +251,7 @@ class WindowMemory():
             vstyle3 = 'val.TLabel' if size else 'Title.TLabel'
             frame = ttk.Frame(dimm_frame2)
             frame.pack(fill=tk.X, pady=1)
-            font = ('Segoe UI', self.fs10)
+            font = ('Segoe UI', self.fs9)
             radio_btn = tk.Radiobutton(frame, text=slot, font=font, variable=vv.dimm_radio, value=str(dnum), command=self.on_radio_select)
             radio_btn.pack(side=tk.LEFT)
             if not size:
@@ -492,7 +492,7 @@ class WindowMemory():
                     options.append( f'MC #{mc_num}, CH #{ch_num}' )
                     if mc_num == self.current_mc and ch_num == self.current_ch:
                         item_active = len(options) - 1
-            vv.mc_ch_combobox = ttk.Combobox(frame, values=options, width = width + 2, font = ('Segoe UI', self.fs10))
+            vv.mc_ch_combobox = ttk.Combobox(frame, values=options, width = width + 2, font = ('Segoe UI', self.fs9))
             vv.mc_ch_combobox.pack(side=tk.LEFT, padx = 1)
             vv.mc_ch_combobox.current(item_active)
             vv.mc_ch_combobox.pack()
