@@ -620,7 +620,7 @@ def get_mrs_storage(data, tm, info, controller, channel):
             MR40 = MR37 + 3
             MR45 = MR40 + 1
             MR10 = MR45 + 1
-            mr["VrefDq"] = DDR5_MR10_decode(get_bits(mrs_data, MR10, 0, 7))
+            mr["VrefDQ"] = DDR5_MR10_decode(get_bits(mrs_data, MR10, 0, 7))
         else:
             pass # FIXME
 
@@ -716,8 +716,8 @@ def get_mrs_storage(data, tm, info, controller, channel):
             'CKb=RttCK_B',                       # mpcMR32b0
             'CSb=RttCS_B',                       # mpcMR32b1
             'CAb=RttCA_B',                       # mpcMR33b0
-            'MR11=VrefCa',
-            'MR12=VrefCs',
+            'MR11=VrefCA',
+            'MR12=VrefCS',
             'ParkDqs=RttParkDqs',                # mpcMR33
             'Park=RttPARK',                      # mpcMR34
             'MR0=MR0',
@@ -738,8 +738,8 @@ def get_mrs_storage(data, tm, info, controller, channel):
             'CKb=RttCK_B#0', 'CKb=RttCK_B#1',    # mpcMR32b0
             'CSb=RttCS_B#0', 'CSb=RttCS_B#1',    # mpcMR32b1
             'CAb=RttCA_B#0', 'CAb=RttCA_B#1',    # mpcMR33b0
-            'MR11=VrefCa#0', 'MR11=VrefCa#1',
-            'MR12=VrefCs#0', 'MR12=VrefCs#1',
+            'MR11=VrefCA#0', 'MR11=VrefCA#1',
+            'MR12=VrefCS#0', 'MR12=VrefCS#1',
             'ParkDqs=RttParkDqs#0', 'ParkDqs=RttParkDqs#1',   # mpcMR33
             'Park=RttPARK#0', 'Park=RttPARK#1',               # mpcMR34
             'MR0=MR0',
@@ -760,8 +760,8 @@ def get_mrs_storage(data, tm, info, controller, channel):
             'CKb=RttCK_B#0', 'CKb=RttCK_B#1', 'CKb=RttCK_B#2', 'CKb=RttCK_B#3',
             'CSb=RttCS_B#0', 'CSb=RttCS_B#1', 'CSb=RttCS_B#2', 'CSb=RttCS_B#3',
             'CAb=RttCA_B#0', 'CAb=RttCA_B#1', 'CAb=RttCA_B#2', 'CAb=RttCA_B#3',
-            'MR11=VrefCa#0', 'MR11=VrefCa#1', 'MR11=VrefCa#2', 'MR11=VrefCa#3',
-            'MR12=VrefCs#0', 'MR12=VrefCs#1', 'MR12=VrefCs#2', 'MR12=VrefCs#3',
+            'MR11=VrefCA#0', 'MR11=VrefCA#1', 'MR11=VrefCA#2', 'MR11=VrefCA#3',
+            'MR12=VrefCS#0', 'MR12=VrefCS#1', 'MR12=VrefCS#2', 'MR12=VrefCS#3',
             'ParkDqs=RttParkDqs#0', 'ParkDqs=RttParkDqs#1', 'ParkDqs=RttParkDqs#2', 'ParkDqs=RttParkDqs#3',
             'Park=RttPARK#0', 'Park=RttPARK#1', 'Park=RttPARK#2', 'Park=RttPARK#3',
             'MR0=MR0',
@@ -782,8 +782,8 @@ def get_mrs_storage(data, tm, info, controller, channel):
             'CKb=RttCK_B',                       # mpcMR32b0
             'CSb=RttCS_B',                       # mpcMR32b1
             'CAb=RttCA_B',                       # mpcMR33b0
-            'MR11=VrefCa',
-            'MR12=VrefCs',
+            'MR11=VrefCA',
+            'MR12=VrefCS',
             'ParkDqs=RttParkDqs',                # mpcMR33
             'Park=RttPARK',                      # mpcMR34
             'MR0=MR0',

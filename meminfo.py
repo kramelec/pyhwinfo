@@ -682,7 +682,7 @@ class WindowMemory():
         create_odt_val(odt_rtt_frame, None, [ "NomRd", "NomWr", "Loopback" ], wn = 8 )
         create_odt_val(odt_cxA_frame, 'A', [ "CA", "CS", "CK" ], wn = 3 )
         create_odt_val(odt_cxB_frame, 'B', [ "CA", "CS", "CK" ], wn = 3 )
-        create_odt_val(odt_vref_frame, 'V', [ "CA", "CS", "Dq" ], wn = 3 )
+        create_odt_val(odt_vref_frame, 'V', [ "CA", "CS", "DQ" ], wn = 3 )
 
         btn_frame = ttk.Frame(main_frame)
         btn_frame.pack(fill=tk.X, pady=3)
@@ -964,9 +964,9 @@ class WindowMemory():
             set_odt_val(mrs, 'RttCK_B', "CK_B")
             set_odt_val(mrs, 'RttCS_B', "CS_B")
             set_odt_val(mrs, 'RttCA_B', "CA_B")
-            set_odt_val(mrs, 'VrefCa', "CA_V")
-            set_odt_val(mrs, 'VrefCs', "CS_V")
-            set_odt_val(mrs, 'VrefDq', "Dq_V")
+            set_odt_val(mrs, 'VrefCA', "CA_V")
+            set_odt_val(mrs, 'VrefCS', "CS_V")
+            set_odt_val(mrs, 'VrefDQ', "DQ_V")
             vv.PullUpDrv.value   = mrs['MR5']['PullUpOutputDriverImpedance']   if 'MR5' in mrs else ''
             vv.PullDownDrv.value = mrs['MR5']['PullDownOutputDriverImpedance'] if 'MR5' in mrs else ''
 
