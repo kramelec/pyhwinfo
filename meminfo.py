@@ -872,7 +872,10 @@ class WindowMemory():
         vv.tRRD_S.value = ci['tRRD_S']
         vv.tRDPRE.value = ci['tRDPRE']
         vv.tRDPDEN.value = ci['tRDPDEN']
-        vv.tRTP.value = ci['tRTP']
+        if 'MRS' in ci and 'MR6' in ci['MRS'] and ci['MRS']['MR6']['tRTP']:
+            vv.tRTP.value = ci['MRS']['MR6']['tRTP']
+        else:
+            vv.tRTP.value = ci['tRTP'] if ci['tRTP'] else ''
         vv.tREFIx9.value = ci['tREFIx9']
         vv.tWR.value = ci['tWR']
         vv.tWTR_L.value = ci['tWTR_L']
