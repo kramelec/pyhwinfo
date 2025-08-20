@@ -556,8 +556,9 @@ def get_mrs_storage(data, tm, info, controller, channel):
         return  # unsupported format
 
     MR34 = None
-    MR37 = -1
-    mr['MR37_offset'] = None
+    MR37 = None
+    MR40 = None
+    mr['MR37_offset'] = MR37
     if cpu_id in i12_FAM:
         mr37v = b'\x1B'  # OdtlOffWrOffsetPlus2 << 3 + OdtlOnWrOffsetMinus2 = 3 << 3 + 3
         mr38v = b'\x1B'  # OdtlOnWrOffsetMinus2 << 3 + OdtlOffWrOffsetPlus2 = 3 << 3 + 3
@@ -565,16 +566,18 @@ def get_mrs_storage(data, tm, info, controller, channel):
         MR37 = mrs_data.rfind(mr37v + mr38v + mr39v)
     elif cpu_id in i15_FAM:
         MR37 = mrs_data.rfind(b'\x09\x09\x12')  # ???????
+
+    if isinstance(MR37, int) and MR37 <= 0:
+        MR37 = None
         
-    if MR37 >= 0:
+    if MR37:
+        MR40 = MR37 + 3
+        DqsOffset = get_bits(mrs_data, MR40, 0, 2)
+        mr40vhigh = get_bits(mrs_data, MR40, 3, 7)
+        if mr40vhigh != 0:
+            MR37 = MR40 = None
         mr['MR37_offset'] = MR37
-        if False:
-            mr["OdtlOnWrOffset"]    = get_bits(mrs_data, MR37 + 0, 0, 2)
-            mr["OdtlOffWrOffset"]   = get_bits(mrs_data, MR37 + 0, 3, 5)
-            mr["OdtlOnWrNtOffset"]  = get_bits(mrs_data, MR37 + 1, 0, 2)
-            mr["OdtlOffWrNtOffset"] = get_bits(mrs_data, MR37 + 1, 3, 5)
-            mr["OdtlOnRdNtOffset"]  = get_bits(mrs_data, MR37 + 2, 0, 2)
-            mr["OdtlOffRdNtOffset"] = get_bits(mrs_data, MR37 + 2, 3, 5)
+    if MR37:
         MR34 = None
         for pos in range(MR37 - 1, MR37 - 12, -1):
             if pos <= 1:
@@ -597,7 +600,7 @@ def get_mrs_storage(data, tm, info, controller, channel):
             mr["RttNomRd"]    = OdtDecode(get_bits(mrs_data, MR35, 3, 5))
             MR36 = MR34 + 2
             mr["RttLoopback"] = OdtDecode(get_bits(mrs_data, MR36, 0, 2))
-        if cpu_id in i12_FAM:
+        elif cpu_id in i12_FAM:
             xv = MR37 - MR34 - 1
             if xv >= 2 and (xv % 2) == 0:
                 km = xv // 2
@@ -617,12 +620,15 @@ def get_mrs_storage(data, tm, info, controller, channel):
                 for key, val in mr.items():
                     if isinstance(val, list) and len(val) == 1:
                         mr[key] = val[0]
-            MR40 = MR37 + 3
-            MR45 = MR40 + 1
-            MR10 = MR45 + 1
-            mr["VrefDQ"] = DDR5_MR10_decode(get_bits(mrs_data, MR10, 0, 7))
         else:
             pass # FIXME
+    if MR40:
+        MR45 = MR40 + 1
+        MR10 = MR45 + 1
+        mr["VrefDQ"] = DDR5_MR10_decode(get_bits(mrs_data, MR10, 0, 7))
+
+    #print(json.dumps(mr, indent=4))
+    #sys.exit(1)
 
     DDR5_MPC_SET_2N_COMMAND_TIMING   = 0x08
     DDR5_MPC_SET_1N_COMMAND_TIMING   = 0x09
