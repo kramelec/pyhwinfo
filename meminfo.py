@@ -21,6 +21,7 @@ from hardware import *
 from jep106 import *
 from memory import *
 
+from about import *
 import mem_helpers
 from mem_helpers import *
 from mlc_tool import MLCTool, MLCDialog
@@ -1017,12 +1018,16 @@ class WindowMemory():
         menubar.add_cascade(label = "  Help  ", menu = info_menu)
         info_menu.add_command(label = "Optimization Guide", font = font, command = self.advanced_tooltip.show_advanced_info)
         info_menu.add_separator()
+        info_menu.add_command(label = "About", font = font, command = self.wnd_menu_about)
 
     def wnd_destroy(self):
         self.root.destroy()
     
     def wnd_menu_refresh(self):
         self.refresh()
+        
+    def wnd_menu_about(self):
+        AboutDialog(self.root, appver)
 
     def take_screenshot(self):
         import ctypes, mss, datetime
