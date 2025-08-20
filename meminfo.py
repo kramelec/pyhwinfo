@@ -179,6 +179,7 @@ class WindowMemory():
         style.configure('fixV_violat.TLabel',  font=xfont, padding=0, background="#FFB6C1", foreground="black", relief="groove", borderwidth=2)
 
     def create_window(self):
+        self.create_menu()
         vv = self.vars
         mem = None
         if self.mem_info:
@@ -684,25 +685,6 @@ class WindowMemory():
         create_odt_val(odt_cxB_frame, 'B', [ "CA", "CS", "CK" ], wn = 3 )
         create_odt_val(odt_vref_frame, 'V', [ "CA", "CS", "DQ" ], wn = 3 )
 
-        btn_frame = ttk.Frame(main_frame)
-        btn_frame.pack(fill=tk.X, pady=3)
-
-        btn_dump = ttk.Button(btn_frame, text="Save to file", command = self.button_click_dump)
-        btn_dump.pack(side=tk.LEFT)
-
-        # Add MLC button
-        btn_mlc = ttk.Button(btn_frame, text="MLC Latency Test", command = self.button_click_mlc)
-        btn_mlc.pack(side=tk.LEFT, padx=(10, 0))
-        
-        # Add tooltip for MLC button
-        ToolTip(btn_mlc, "Run Intel Memory Latency Checker (MLC) to measure:\n"
-                        "• DDR5 DRAM idle latency (nanoseconds)\n"
-                        "• Memory bandwidth (MB/s)\n"
-                        "Requires mlc.exe to be available or browseable.")
-
-        btn_refresh = ttk.Button(btn_frame, text="Refresh", command = self.button_click_refresh)
-        btn_refresh.pack(side=tk.RIGHT)
-
     def update(self, slot_id = None, mc_id = None, ch_id = None):
         vv = self.vars
         if slot_id is None:
@@ -998,10 +980,6 @@ class WindowMemory():
                 SdkInit(None, verbose = 0)
                 self.sdk_inited = True
             self.mem_info = get_mem_spd_all(None, with_pmic = True, allinone = True)
-    
-    def button_click_refresh(self):
-        print("Button refresh clicked!")
-        self.refresh()
 
     def on_radio_select(self):
         vv = self.vars
@@ -1019,6 +997,33 @@ class WindowMemory():
         ch_num = int(xx[1].split('#')[1].strip())
         self.update(slot_id = self.current_slot, mc_id = mc_num, ch_id = ch_num)
 
+    def create_menu(self):
+        menubar = tk.Menu(self.root)
+        self.root.config(menu = menubar)
+        font = ('Segoe UI', 12)
+
+        file_menu = tk.Menu(menubar, tearoff = 0, font = font)
+        menubar.add_cascade(label = "  File  ", menu = file_menu)
+        file_menu.add_command(label = "Save all data to JSON-file", font = font, command = self.wnd_menu_save_json)
+        file_menu.add_separator()
+        file_menu.add_command(label = "Exit", font = font, command = self.wnd_destroy)
+
+        act_menu = tk.Menu(menubar, tearoff = 0, font = font)
+        menubar.add_cascade(label = "  Actions  ", menu = act_menu)
+        act_menu.add_command(label = "Refresh", font = font, command = self.wnd_menu_refresh)
+        act_menu.add_command(label = "MLC tool", font = font, command = self.wnd_menu_mlc)
+
+        info_menu = tk.Menu(menubar, tearoff = 0, font = font)
+        menubar.add_cascade(label = "  Help  ", menu = info_menu)
+        info_menu.add_command(label = "Optimization Guide", font = font, command = self.advanced_tooltip.show_advanced_info)
+        info_menu.add_separator()
+
+    def wnd_destroy(self):
+        self.root.destroy()
+    
+    def wnd_menu_refresh(self):
+        self.refresh()
+
     def take_screenshot(self):
         import ctypes, mss, datetime
         hWnd = ctypes.windll.user32.GetForegroundWindow()
@@ -1035,7 +1040,7 @@ class WindowMemory():
                 mss.tools.to_png(screenshot.rgb, screenshot.size, output = fn)
                 print(f'Screenshot saved to file "{fn}"')
 
-    def button_click_dump(self):
+    def wnd_menu_save_json(self):
         from datetime import datetime
         #print("Button Save clicked!")
         if 'time' in self.mem_info:
@@ -1048,7 +1053,7 @@ class WindowMemory():
             json.dump(self.mem_info, file, indent = 4)
         print(f'File "{fn}" created')
 
-    def button_click_mlc(self):
+    def wnd_menu_mlc(self):
         """Handle MLC button click - show MLC measurement dialog"""
         print("MLC Latency Test button clicked!")
         if not self.mlc_dialog:
