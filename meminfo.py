@@ -272,23 +272,33 @@ class WindowMemory():
             ttk.Label(frame, text=die_t, style='Title.TLabel', width=3, anchor='e').pack(side=tk.LEFT)
             ttk.Label(frame, textvariable=die_var, style=vstyle2, width=15, anchor='center').pack(side=tk.LEFT)
             
+        self.page_dict = { }
+        self.page_list = [ ]
         self.dimm_map = { }
         dnum = 0
         for mc in mem['mc']:
             mc_num = mc['controller']
+            self.page_dict[mc_num] = { }
             chlst = [ mc['channels'][0], mc['channels'][1] ]
             for pnum in range(0, 2):
                 size = 0
                 ch_num_list = [ ]
                 ch_tag_list = [ ]
                 for cnum, ch in enumerate(chlst):
+                    ch_num = ch['__channel']
+                    if not mc_num in self.page_dict or not ch_num in self.page_dict[mc_num]:
+                        if mc_num not in self.page_dict:
+                            self.page_dict[mc_num] = { }
+                        page = { 'mc': mc_num, 'ch': ch_num, 'frame': None }
+                        self.page_dict[mc_num][ch_num] = page
+                        self.page_list.append(page)
                     if pnum == 0:
                         tag = 'L' if ch['DIMM_L_MAP'] == 0 else 'S'
                     else:
                         tag = 'S' if ch['DIMM_L_MAP'] == 0 else 'L'
                     sz = ch[f'Dimm_{tag}_Size']
                     if sz > 0:
-                        ch_num_list.append(ch['__channel'])
+                        ch_num_list.append(ch_num)
                         ch_tag_list.append(tag)
                         size += sz
                 size = size // 2
@@ -458,7 +468,27 @@ class WindowMemory():
             ( "VDDQ_TX", '@A' ),
         ]
         create_col_ctrl(elems, wn = 7, wv = 7)
-        
+
+        self.notebook = ttk.Notebook(main_frame)
+        self.notebook.pack(fill = 'both', expand = True, padx = 1, pady = 1)
+
+        self.vars.page = { }
+        for mc_num, chan in self.page_dict.items():
+            self.vars.page[mc_num] = { }
+            for ch_num, page in self.page_dict[mc_num].items():
+                self.vars.page[mc_num][ch_num] = types.SimpleNamespace()
+                self.create_notebook_page(mc_num, ch_num)
+
+    def create_notebook_page(self, mc_num, ch_num):    
+        vv = self.vars.page[mc_num][ch_num]
+        page = self.page_dict[mc_num][ch_num]
+        page_frame = ttk.Frame(self.notebook)
+        self.notebook.add(page_frame, text = f"  MC {mc_num} : CH {ch_num}  ")
+        page['frame'] = page_frame
+        timings_frame = page_frame
+
+        mem = self.mem_info['memory'] if self.mem_info else None
+
         def draw_timing_label_and_value(base_frame, name, var, wn, wv):
             nonlocal vv
             frame = ttk.Frame(base_frame)
@@ -474,32 +504,9 @@ class WindowMemory():
                 # Add JEDEC validation info to tooltip during update
                 ToolTip(label_widget, tooltip_text)
         
-        # Main timings section
-        timings_frame = ttk.LabelFrame(main_frame, text="Timings", style='Section.TLabelframe')
-        timings_frame.pack(fill=tk.BOTH, expand=True, pady=5)
-        
         base_timings_frame = ttk.Frame(timings_frame)
-        base_timings_frame.pack(fill=tk.BOTH, expand=True, padx=5)
+        base_timings_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady = 2)
 
-        def create_mc_ch_combo(col, width = 8):
-            nonlocal vv, mem
-            frame = ttk.Frame(col)
-            frame.pack(fill=tk.X, pady=2)
-            item_active = 0
-            options = [ ]
-            for mc in mem['mc']:
-                mc_num = mc['controller']
-                for ch in mc['channels']:
-                    ch_num = ch['__channel']
-                    options.append( f'MC #{mc_num}, CH #{ch_num}' )
-                    if mc_num == self.current_mc and ch_num == self.current_ch:
-                        item_active = len(options) - 1
-            vv.mc_ch_combobox = ttk.Combobox(frame, values=options, width = width + 2, font = ('Segoe UI', self.fs9))
-            vv.mc_ch_combobox.pack(side=tk.LEFT, padx = 1)
-            vv.mc_ch_combobox.current(item_active)
-            vv.mc_ch_combobox.pack()
-            vv.mc_ch_combobox.bind("<<ComboboxSelected>>", self.on_combobox_select)
-        
         def create_col_timings(tlist, wn = 8, wv = 5, frame = None):
             nonlocal vv, base_timings_frame
             if not frame:
@@ -512,9 +519,6 @@ class WindowMemory():
                     name = item
                 else:
                     name, value = item
-                if name == '__combobox':
-                    create_mc_ch_combo(col, wn + wv)
-                    continue
                 var = WinVar(value)
                 setattr(vv, name, var)
                 _wn = wn
@@ -528,7 +532,7 @@ class WindowMemory():
                 draw_timing_label_and_value(col, name, var, _wn, _wv)
 
         col_timings = [
-            ( "__combobox", "" ),
+            ( "---",    "" ),
             ( "tCL",    '??' ),
             ( "tRCD",   '??' ),
             ( "tRCDW",  ''   ),
@@ -686,14 +690,10 @@ class WindowMemory():
         create_odt_val(odt_cxB_frame, 'B', [ "CA", "CS", "CK" ], wn = 3 )
         create_odt_val(odt_vref_frame, 'V', [ "CA", "CS", "DQ" ], wn = 3 )
 
-    def update(self, slot_id = None, mc_id = None, ch_id = None):
+    def update(self, slot_id = None):
         vv = self.vars
         if slot_id is None:
             slot_id = self.current_slot
-        if mc_id is None:
-            mc_id = self.current_mc
-        if ch_id is None:
-            ch_id = self.current_ch
         cap = self.mem_info['CAP']
         mem = self.mem_info['memory']
         dimm = None
@@ -834,7 +834,21 @@ class WindowMemory():
             
         if 'REQ_VDDQ_TX_ICCMAX' in mem:
             vv.VDDQ_TX_ICCMAX.value = mem['REQ_VDDQ_TX_ICCMAX']
+            
+        for page in self.page_list:
+            mc = page['mc']
+            ch = page['ch']
+            self.update_page(slot_id, mc, ch)
+            chan = mem['mc'][mc]['channels'][ch]
+            validate_timings(self, chan['info'], MCLK_FREQ, vv, self.vars.page[mc][ch])
         
+        self.current_slot = slot_id
+        
+    def update_page(self, slot_id, mc_id, ch_id):
+        mem = self.mem_info['memory']
+        info = mem['mc'][mc_id]
+        
+        vv = self.vars.page[mc_id][ch_id]
         chan = mem['mc'][mc_id]['channels'][ch_id]
         ci = chan['info']
         vv.tCL.value = ci['tCL']
@@ -916,7 +930,7 @@ class WindowMemory():
             return value
 
         def set_odt_val(mrs, mrs_name, name):
-            vv = self.vars
+            nonlocal vv
             vvname0 = 'ODT_' + name + '__0'
             vvname1 = 'ODT_' + name + '__1'
             try:
@@ -956,9 +970,6 @@ class WindowMemory():
             vv.PullUpDrv.value   = mrs['MR5']['PullUpOutputDriverImpedance']   if 'MR5' in mrs else ''
             vv.PullDownDrv.value = mrs['MR5']['PullDownOutputDriverImpedance'] if 'MR5' in mrs else ''
 
-        validate_timings(self, ci, MCLK_FREQ)
-
-        self.current_slot = slot_id
         self.current_mc = mc_id
         self.current_ch = ch_id
     
@@ -989,15 +1000,6 @@ class WindowMemory():
         self.current_slot = int(slot)
         self.update(slot_id = int(slot))
         
-    def on_combobox_select(self, event):
-        vv = self.vars
-        selected_value = vv.mc_ch_combobox.get()
-        print(f"You selected: {selected_value}")
-        xx = selected_value.split(',')
-        mc_num = int(xx[0].split('#')[1].strip())
-        ch_num = int(xx[1].split('#')[1].strip())
-        self.update(slot_id = self.current_slot, mc_id = mc_num, ch_id = ch_num)
-
     def create_menu(self):
         menubar = tk.Menu(self.root)
         self.root.config(menu = menubar)

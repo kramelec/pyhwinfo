@@ -1048,11 +1048,10 @@ def get_timing_validation_style(validation_result):
     else:
         return 'fixV.TLabel'            # Default white for loose/unknown
 
-def validate_timings(self, ci, MCLK_FREQ):
+def validate_timings(self, ci, MCLK_FREQ, vvb, vv):
     global m_inf
-    vv = self.vars
     # Get memory speed and clock period for JEDEC validation
-    memory_speed = int(vv.mem_freq.value) if vv.mem_freq.value and vv.mem_freq.value != '????' else 4800
+    memory_speed = int(vvb.mem_freq.value) if vvb.mem_freq.value and vvb.mem_freq.value != '????' else 4800
     if MCLK_FREQ and MCLK_FREQ > 0:
         tck_avg_ns = 1.0 / (MCLK_FREQ * 2 * 1e6)  # Convert MHz to ns (divide by 2 for DDR)
     else:
