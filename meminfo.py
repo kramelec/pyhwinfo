@@ -331,11 +331,15 @@ class WindowMemory():
         dram_ext_frame = ttk.Frame(main_frame)
         dram_ext_frame.pack(fill=tk.X, pady=1)
 
+        vv.SPD_name = WinVar('???????')
+        ttk.Label(dram_ext_frame, text='SPD', style='Title.TLabel', width=4, anchor='e').pack(side=tk.LEFT)
+        ttk.Label(dram_ext_frame, textvariable=vv.SPD_name, style='fixV2.TLabel', width=36, anchor='center').pack(side=tk.LEFT)
+
         ttk.Label(dram_ext_frame, text=' ', style='Title.TLabel', width=2, anchor='e').pack(side=tk.LEFT, fill=tk.X, expand = True)
         
         vv.PMIC_name = WinVar('???????')
         ttk.Label(dram_ext_frame, text='PMIC', style='Title.TLabel', width=5, anchor='e').pack(side=tk.LEFT)
-        ttk.Label(dram_ext_frame, textvariable=vv.PMIC_name, style='fixV2.TLabel', width=26, anchor='center').pack(side=tk.LEFT)
+        ttk.Label(dram_ext_frame, textvariable=vv.PMIC_name, style='fixV2.TLabel', width=36, anchor='center').pack(side=tk.LEFT)
         
         freq_volt_frame = ttk.Frame(main_frame)
         freq_volt_frame.pack(fill=tk.X, pady=0)
@@ -734,10 +738,20 @@ class WindowMemory():
                 if 'die_stepping' in spd:
                     vendor += f' [0x{spd["die_stepping"]:02X}]'
                 vv.die_vendor_list[slot].value = vendor
+
+        vv.SPD_name.value = ''
+        if cur_dimm and 'spd_vid' in cur_dimm and cur_dimm['spd_vid']:
+            name = get_pretty_vendor_name(cur_dimm['spd_vid'])
+            if 'SPD' in cur_dimm and 'revision' in cur_dimm['SPD'] and cur_dimm['SPD']['revision']:
+                name += ' [' + cur_dimm['SPD']['revision'] + ']'
+            vv.SPD_name.value = name
         
         vv.PMIC_name.value = ''
         if cur_dimm and 'PMIC' in cur_dimm and cur_dimm['PMIC']:
-            vv.PMIC_name.value = get_pretty_vendor_name(cur_dimm['PMIC']['vid'])
+            name = get_pretty_vendor_name(cur_dimm['PMIC']['vid'])
+            if 'revision' in cur_dimm['PMIC'] and cur_dimm['PMIC']['revision']:
+                name += ' [' + cur_dimm['PMIC']['revision'] + ']'
+            vv.PMIC_name.value = name
         
         MCLK_FREQ = ''
         QCLK_RATIO = 0
