@@ -840,7 +840,18 @@ class WindowMemory():
         vv.TIMING_RUNTIME_OC.value = 'ON' if mem['MC_TIMING_RUNTIME_OC_ENABLED'] else 'off'
         vv.BCLK_OC.value = 'ON' if cap['BCLKOCRANGE'] == 3 else 'off'
         vv.OC_ENABLED.value = 'ON' if cap['OC_ENABLED'] else 'off'
-        vv.SA_VOLTAGE.value = mem['SA']['SA_VOLTAGE']
+        vv.SA_VOLTAGE.value = ''
+        if mem['SA']['SA_VOLTAGE']:
+            vv.SA_VOLTAGE.value = mem['SA']['SA_VOLTAGE']
+        elif msr and 'VF' in msr and 'SYSTEM_AGENT' in msr['VF']:
+            VoltageTarget = msr['VF']['SYSTEM_AGENT']['VoltageTarget']
+            VoltageOffset = msr['VF']['SYSTEM_AGENT']['VoltageOffset']
+            if VoltageTarget and VoltageTarget > 0.0:
+                vv.SA_VOLTAGE.value = round(VoltageTarget, 3)
+            elif VoltageOffset < 0.0:
+                vv.SA_VOLTAGE.value = str(round(VoltageOffset, 3))
+            elif VoltageOffset >= 0.0:
+                vv.SA_VOLTAGE.value = '+' + str(round(VoltageOffset, 3))
         vv.POWER_LIMIT.value = ''
         if 'LIMIT2_ENABLE' in mem['POWER']:
             if mem['POWER']['LIMIT2_ENABLE'] == 0 and mem['POWER']['LIMIT1_ENABLE'] == 0:
