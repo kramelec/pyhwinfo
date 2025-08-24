@@ -699,6 +699,7 @@ class WindowMemory():
         if slot_id is None:
             slot_id = self.current_slot
         cap = self.mem_info['CAP']
+        msr = self.mem_info['MSR'] if 'MSR' in self.mem_info else { }
         mem = self.mem_info['memory']
         dimm = None
         for elem in self.mem_info['memory']['DIMM']:
@@ -778,8 +779,12 @@ class WindowMemory():
             vv.MCLK_FREQ.value = round(MCLK_FREQ, 2)
         
         vv.BCLK_U.value = mem['BCLK_FREQ']
-        vv.UCLK_RATIO.value = mem['SA']['UCLK_RATIO']
-        vv.UCLK_FREQ.value  = mem['SA']['UCLK']
+        if msr and 'VF' in msr and 'RING' in msr['VF']:
+            UCLK_RATIO = msr['VF']['RING']['MaxOcRatio']
+        else:
+            UCLK_RATIO = mem['SA']['UCLK_RATIO']
+        vv.UCLK_RATIO.value = UCLK_RATIO
+        vv.UCLK_FREQ.value = round(mem['BCLK_FREQ'] * UCLK_RATIO, 2)
         
         if mem['mc'][0]['DDR_ver'] == 5:
             max_chan_count = len(mem['mc']) * len(mem['mc'][0]['channels'])
