@@ -155,7 +155,11 @@ class SMBus():
         self.init_mutex()
 
     def acquire(self, throwable = True):
-        self.mutex.acquire(wait_ms = self.mutex_wait_timeout, throwable = throwable)
+        rc = self.mutex.acquire(wait_ms = self.mutex_wait_timeout, throwable = throwable)
+        if not throwable and rc == False:
+            return False
+        if not self.port:
+            return True
         is_inuse = True
         try:
             # Wait for device to be unlocked by BIOS/ACPI
@@ -179,9 +183,11 @@ class SMBus():
 
     def release(self):
         try:
-            # Unlock the SMBus device for use by BIOS/ACPI, and clear status flags
-            # if not done already.
-            port_write_u1(self.port + SMBHSTSTS, SMBHSTSTS_INUSE_STS | STATUS_FLAGS)
+            if self.port:
+                # Unlock the SMBus device for use by BIOS/ACPI, and clear status flags
+                # if not done already.
+                port_write_u1(self.port + SMBHSTSTS, SMBHSTSTS_INUSE_STS | STATUS_FLAGS)
+                #log.info(f'SMBus unlocked (set sts = 0x{SMBHSTSTS_INUSE_STS | STATUS_FLAGS:02X})')
         finally:
             self.mutex.release()
 
@@ -531,5 +537,19 @@ class SMBus():
 
 
 if __name__ == "__main__":
-    pass
+    SdkInit(None, 0)
+    log.change_log_level(log.TRACE)
+    smb = SMBus(0xEFA0)
+    smb.acquire()
+    log.change_log_level(log.CRITICAL)
+    try:
+        slot_dict = { }
+        for dev in range(0x10, 0x7F):
+            val = smb.recv_byte(dev)
+            if val is None:
+                continue
+            print(f'SMBus[0x{dev:02X}] detected')
+    finally:
+        smb.release()
+
     
