@@ -224,30 +224,33 @@ class MsrMailBox():
         return (RunBusy << 31) | (Param2 << 16) | (Param1 << 8) | (command & 0xFF)
     
     def _msr_pcode_mailbox(self, command, p1, p2, data = None):
+        self.status = 0xFFF
         cmd = self.make_pcode_mailbox_cmd(command, p1, p2)
         rc = msr_write(VR_MAILBOX_MSR_DATA, 0, data if data else 0)
         if not rc:
             log.error(f'_msr_pcode_mailbox(0x{cmd:X}): cannot write MSR reg!')
-            return None, None
+            return None
         rc = msr_write(VR_MAILBOX_MSR_INTERFACE, 0, cmd)
         if not rc:
             log.error(f'_msr_pcode_mailbox(0x{cmd:X}): cannot write MSR reg!')
-            return None, None
+            return None
         start_time = datetime.now()
         while True:
             val = msr_read(VR_MAILBOX_MSR_INTERFACE)
-            status = val & 0xFFFFFFFF
-            RunBusy = True if (status & 0x80000000) != 0 else False
+            if val is None:
+                log.error(f'_msr_pcode_mailbox(0x{cmd:X}): cannot read MSR reg!')
+                return None
+            self.status = val & 0xFFFFFFFF
+            RunBusy = True if (self.status & 0x80000000) != 0 else False
             if not RunBusy:
                 break
             if datetime.now() - start_time > timedelta(milliseconds = self.mailbox_wait_timeout):
-                log.error(f'msr_pcode_mailbox(0x{cmd:X}): timedout!')
-                return None, None
+                log.error(f'_msr_pcode_mailbox(0x{cmd:X}): timedout!')
+                return None
             pass
-        if status != 0:
-            log.warning(f'_msr_pcode_mailbox(0x{cmd:X}): sts = 0x{status:X}')
-        value = msr_read(VR_MAILBOX_MSR_DATA)
-        return status, value
+        if self.status != 0:
+            log.warning(f'_msr_pcode_mailbox(0x{cmd:X}): sts = 0x{self.status:X}')
+        return msr_read(VR_MAILBOX_MSR_DATA)
 
     def make_oc_mailbox_cmd(self, command, p1, p2):
         # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # file "CpuMailboxLib.h"  struct _OC_MAILBOX_FULL 
@@ -257,27 +260,30 @@ class MsrMailBox():
         return (RunBusy << 31) | (Param2 << 16) | (Param1 << 8) | (command & 0xFF)
 
     def _msr_oc_mailbox(self, command, p1, p2, data = None):
+        self.status = 0xFFF
         cmd = self.make_oc_mailbox_cmd(command, p1, p2)
         rc = msr_write(MSR_OC_MAILBOX, cmd, data if data else 0)
         if not rc:
             log.error(f'_msr_oc_mailbox(0x{cmd:X}): cannot write MSR reg!')
-            return None, None
+            return None
         start_time = datetime.now()
         while True:
             val = msr_read(MSR_OC_MAILBOX)
-            status = val >> 32
-            RunBusy = True if (status & 0x80000000) != 0 else False
+            if val is None:
+                log.error(f'_msr_oc_mailbox(0x{cmd:X}): cannot read MSR reg!')
+                return None
+            self.status = val >> 32
+            RunBusy = True if (self.status & 0x80000000) != 0 else False
             if not RunBusy:
                 break
             if datetime.now() - start_time > timedelta(milliseconds = self.mailbox_wait_timeout):
                 log.error(f'_msr_oc_mailbox(0x{cmd:X}): timedout!')
-                return None, None
+                return None
             pass
-        if status != 0:
-            log.warning(f'_msr_oc_mailbox(0x{cmd:X}): sts = 0x{status:X}')
-        value = val & 0xFFFFFFFF
-        return status, value
-    
+        if self.status != 0:
+            log.warning(f'_msr_oc_mailbox(0x{cmd:X}): sts = 0x{self.status:X}')
+        return val & 0xFFFFFFFF
+
     def parse_vr_topology(self, data):
         # struct OCMB_VR_TOPOLOGY_DATA / VR_TOPOLOGY_DATA
         vrt = { }
@@ -305,35 +311,35 @@ class MsrMailBox():
         self.VrGtAddress = None
         
         # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # file "OverClockSetup.c"   func: InitVrIccOcStrings
-        sts, data = self._msr_oc_mailbox(MAILBOX_OC_CMD_GET_VR_TOPOLOGY, 0, 0)
-        if sts != 0:
-            log.error(f'MAILBOX_OC_CMD_GET_VR_TOPOLOGY({0},{0}): sts = 0x{sts:X}')
+        data = self._msr_oc_mailbox(MAILBOX_OC_CMD_GET_VR_TOPOLOGY, 0, 0)
+        if data is None:
+            log.error(f'MAILBOX_OC_CMD_GET_VR_TOPOLOGY({0},{0}): status = 0x{self.status:X}')
         else:
             out['VR_TOPOLOGY'] = self.parse_vr_topology(data)
             self.VrIaAddress = out['VR_TOPOLOGY']['VrIaAddress']
             self.VrGtAddress = out['VR_TOPOLOGY']['VrGtAddress']
 
         if self.VrIaAddress is None:
-            sts, data = self._msr_pcode_mailbox(MAILBOX_VR_CMD_SVID_VR_HANDLER, MAILBOX_VR_SUBCMD_SVID_GET_STRAP_CONFIGURATION, 0)
-            if sts != 0:
-                log.error(f'MAILBOX_VR_CMD_SVID_VR_HANDLER({MAILBOX_VR_SUBCMD_SVID_GET_STRAP_CONFIGURATION},{0}): sts = 0x{sts:X}')
+            data = self._msr_pcode_mailbox(MAILBOX_VR_CMD_SVID_VR_HANDLER, MAILBOX_VR_SUBCMD_SVID_GET_STRAP_CONFIGURATION, 0)
+            if data is None:
+                log.error(f'MAILBOX_VR_CMD_SVID_VR_HANDLER({MAILBOX_VR_SUBCMD_SVID_GET_STRAP_CONFIGURATION},{0}): status = 0x{self.status:X}')
             else:
                 out['VR_TOPOLOGY'] = self.parse_vr_topology(data)
                 self.VrIaAddress = out['VR_TOPOLOGY']['VrIaAddress']
                 self.VrGtAddress = out['VR_TOPOLOGY']['VrGtAddress']
         
         if self.VrIaAddress is not None:
-            sts, data = self._msr_oc_mailbox(MAILBOX_OC_CMD_GET_ICCMAX, self.VrIaAddress, 0)
-            if sts != 0:
-                log.error(f'MAILBOX_OC_CMD_GET_ICCMAX({self.VrIaAddress},{0}): sts = 0x{sts:X}')
+            data = self._msr_oc_mailbox(MAILBOX_OC_CMD_GET_ICCMAX, self.VrIaAddress, 0)
+            if data is None:
+                log.error(f'MAILBOX_OC_CMD_GET_ICCMAX({self.VrIaAddress},{0}): status = 0x{self.status:X}')
             else:
                 # struct OCMB_ICCMAX_DATA
                 out['IccMaxValue'] = get_bits(data, 0, 0, 10) * 0.25
                 out['UnlimitedIccMaxMode'] = get_bits(data, 0, 31)
 
-        sts, data = self._msr_oc_mailbox(MAILBOX_OC_CMD_GET_DDR_CAPABILITIES, 0, 0)
-        if sts != 0:
-            log.error(f'MAILBOX_OC_CMD_GET_DDR_CAPABILITIES({0},{0}): sts = 0x{sts:X}')
+        data = self._msr_oc_mailbox(MAILBOX_OC_CMD_GET_DDR_CAPABILITIES, 0, 0)
+        if data is None:
+            log.error(f'MAILBOX_OC_CMD_GET_DDR_CAPABILITIES({0},{0}): status = 0x{self.status:X}')
         else:
             # struct DDR_CAPABILITIES_ITEM
             ddr = out['DDR_CAP'] = { }
@@ -350,9 +356,9 @@ class MsrMailBox():
         out['CoreVoltage'] = round(get_bits(data, 0, 32, 47) / (2**13), 4)
 
         DomainId = MAILBOX_OC_DOMAIN_ID_IA_CORE
-        sts, data = self._msr_oc_mailbox(MAILBOX_OC_CMD_GET_OC_CAPABILITIES, DomainId, 0)
-        if sts != 0:
-            log.error(f'MAILBOX_OC_CMD_GET_OC_CAPABILITIES({DomainId},{0}): sts = 0x{sts:X}')
+        data = self._msr_oc_mailbox(MAILBOX_OC_CMD_GET_OC_CAPABILITIES, DomainId, 0)
+        if data is None:
+            log.error(f'MAILBOX_OC_CMD_GET_OC_CAPABILITIES({DomainId},{0}): status = 0x{self.status:X}')
         else:
             out['MaxOcRatioLimit'] = get_bits(data, 0, 0, 7)
             out['RatioOcSupported'] = get_bits(data, 0, 8)
@@ -364,9 +370,9 @@ class MsrMailBox():
         domain_list = [ MAILBOX_OC_DOMAIN_ID_IA_CORE, MAILBOX_OC_DOMAIN_ID_RING, MAILBOX_OC_DOMAIN_ID_SYSTEM_AGENT ]
         for dn, DomainId in enumerate(domain_list):
             VfPointIndex = 0    # 0 ... CPU_OC_MAX_VF_POINTS
-            sts, data = self._msr_oc_mailbox(MAILBOX_OC_CMD_GET_VOLTAGE_FREQUENCY, DomainId, VfPointIndex)
-            if sts != 0:
-                log.error(f'MAILBOX_OC_CMD_GET_VOLTAGE_FREQUENCY({DomainId},{VfPointIndex}): sts = 0x{sts:X}')
+            data = self._msr_oc_mailbox(MAILBOX_OC_CMD_GET_VOLTAGE_FREQUENCY, DomainId, VfPointIndex)
+            if data is None:
+                log.error(f'MAILBOX_OC_CMD_GET_VOLTAGE_FREQUENCY({DomainId},{VfPointIndex}): status = 0x{self.status:X}')
                 continue
             # struct VF_MAILBOX_COMMAND_DATA
             vfi = vfd[DOMAIN_list[dn]] = { }
@@ -379,18 +385,18 @@ class MsrMailBox():
                 vfi['VoltageTarget'] = None
                 vfi['VoltageOffset'] = sint_to_float(get_bits(data, 0, 21, 31), 10, 11, 4)  # S11.0.10V format
     
-        sts, data = self._msr_pcode_mailbox(MAILBOX_VR_CMD_SVID_VR_HANDLER, MAILBOX_VR_SUBCMD_SVID_GET_VCCINAUX_IMON_IMAX, 0)
-        if sts != 0:
-            log.error(f'MAILBOX_VR_CMD_SVID_VR_HANDLER({MAILBOX_VR_SUBCMD_SVID_GET_VCCINAUX_IMON_IMAX},{0}): sts = 0x{sts:X}')
+        data = self._msr_pcode_mailbox(MAILBOX_VR_CMD_SVID_VR_HANDLER, MAILBOX_VR_SUBCMD_SVID_GET_VCCINAUX_IMON_IMAX, 0)
+        if data is None:
+            log.error(f'MAILBOX_VR_CMD_SVID_VR_HANDLER({MAILBOX_VR_SUBCMD_SVID_GET_VCCINAUX_IMON_IMAX},{0}): status = 0x{self.status:X}')
         else:
             out['VccInAux'] = data / 100.0
 
         if self.VrIaAddress is not None:
             VR_ADDRESS_MASK = 0xF
             p2 = self.VrIaAddress & VR_ADDRESS_MASK
-            sts, data = self._msr_pcode_mailbox(MAILBOX_VR_CMD_SVID_VR_HANDLER, MAILBOX_VR_SUBCMD_SVID_GET_ACDC_LOADLINE, p2)
-            if sts != 0:
-                log.error(f'MAILBOX_VR_CMD_SVID_VR_HANDLER({MAILBOX_VR_SUBCMD_SVID_GET_ACDC_LOADLINE},{p2}): sts = 0x{sts:X}')
+            data = self._msr_pcode_mailbox(MAILBOX_VR_CMD_SVID_VR_HANDLER, MAILBOX_VR_SUBCMD_SVID_GET_ACDC_LOADLINE, p2)
+            if data is None:
+                log.error(f'MAILBOX_VR_CMD_SVID_VR_HANDLER({MAILBOX_VR_SUBCMD_SVID_GET_ACDC_LOADLINE},{p2}): status = 0x{self.status:X}')
             else:
                 out['AC_loadline'] = get_bits(data, 0, 0, 15) / 100.0
                 out['DC_loadline'] = get_bits(data, 0, 16, 31) / 100.0
