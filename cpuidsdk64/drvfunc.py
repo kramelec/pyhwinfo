@@ -292,8 +292,12 @@ def msr_write(reg, val_HI, val_LO):
     _drv = _get_drv()
     inbuf = struct.pack('<III', reg, val_HI, val_LO)
     buf = DeviceIoControl(_drv, IOCTL(CPUZ_MSR_WRITE), inbuf, 8, None)
-    rc = int.from_bytes(buf[:4], 'little', signed = False)
-    return True if rc == 0xAAAAAAAA else False
+    if not buf:
+        return False
+    vLO, vHI = struct.unpack('<II', buf)
+    if vLO != 0xAAAAAAAA or vHI != 0xBBBBBBBB:
+        return False
+    return True
 
 # ioctl: 9C402448
 def msr_oc_mailbox(cmd, data, method = 1):

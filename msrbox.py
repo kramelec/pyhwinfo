@@ -225,8 +225,14 @@ class MsrMailBox():
     
     def _msr_pcode_mailbox(self, command, p1, p2, data = None):
         cmd = self.make_pcode_mailbox_cmd(command, p1, p2)
-        msr_write(VR_MAILBOX_MSR_DATA, 0, data if data else 0)
-        msr_write(VR_MAILBOX_MSR_INTERFACE, 0, cmd)
+        rc = msr_write(VR_MAILBOX_MSR_DATA, 0, data if data else 0)
+        if not rc:
+            log.error(f'_msr_pcode_mailbox(0x{cmd:X}): cannot write MSR reg!')
+            return None, None
+        rc = msr_write(VR_MAILBOX_MSR_INTERFACE, 0, cmd)
+        if not rc:
+            log.error(f'_msr_pcode_mailbox(0x{cmd:X}): cannot write MSR reg!')
+            return None, None
         start_time = datetime.now()
         while True:
             val = msr_read(VR_MAILBOX_MSR_INTERFACE)
@@ -252,7 +258,10 @@ class MsrMailBox():
 
     def _msr_oc_mailbox(self, command, p1, p2, data = None):
         cmd = self.make_oc_mailbox_cmd(command, p1, p2)
-        msr_write(MSR_OC_MAILBOX, cmd, data if data else 0)
+        rc = msr_write(MSR_OC_MAILBOX, cmd, data if data else 0)
+        if not rc:
+            log.error(f'_msr_oc_mailbox(0x{cmd:X}): cannot write MSR reg!')
+            return None, None
         start_time = datetime.now()
         while True:
             val = msr_read(MSR_OC_MAILBOX)
