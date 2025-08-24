@@ -990,7 +990,7 @@ def get_mem_capabilities():
     cap['MAX_DATA_FREQ_DDR5'] = cap['MAX_DATA_RATE_DDR5'] * 266
     cap['VDDQ_VOLTAGE_MAX'] = round(VDDQ_VOLTAGE_MAX * 5 / 1000, 3)  # VDDQ_TX Maximum VID value (granularity UNDOC !!!)
 
-def get_mem_info():
+def get_mem_info(with_msr = True):
     global gdict, cpu_fam, cpu_id, MCHBAR_BASE, DMIBAR_BASE
     proc_name = GetProcessorSpecification()
     print('Processor:', proc_name)
@@ -1041,6 +1041,11 @@ def get_mem_info():
     if g_fake_cpu_id:
         cpu_id = g_fake_cpu_id
         cpu['model_id'] = cpu_id
+
+    if with_msr:
+        import msrbox
+        mmb = msrbox.MsrMailBox()
+        gdict['MSR'] = mmb.read_full_info()
 
     gdict['memory'] = { }
     mi = gdict['memory']
