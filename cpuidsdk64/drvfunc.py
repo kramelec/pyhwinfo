@@ -83,10 +83,10 @@ def port_write(port, value, size = None):
     return True if rc[0] == 0x87654321 and rc[1] == 0x87654321 else False
 
 def port_write_u1(port, value):
-    return port_write(port, value, 1)
+    return port_write(port, value & 0xFF, 1)
 
 def port_write_u4(port, value):
-    return port_write(port, value, 4)
+    return port_write(port, value & 0xFFFFFFFF, 4)
 
 
 def CFG_ADDR(bus, dev, fun, reg):
@@ -285,7 +285,7 @@ def msr_read(reg):
     val_LO, val_HI = struct.unpack('<II', buf)
     if val_LO == 0xFFFFFFFF and val_HI == 0xFFFFFFFF:
         return None
-    return (val_HI, val_LO)
+    return (val_HI << 32) + val_LO
 
 # ioctl: 9C402444
 def msr_write(reg, val_HI, val_LO):
@@ -296,16 +296,16 @@ def msr_write(reg, val_HI, val_LO):
     return True if rc == 0xAAAAAAAA else False
 
 # ioctl: 9C402448
-def msr_command(val_HI, val_LO, method = 1):
+def msr_oc_mailbox(cmd, data, method = 1):
     _drv = _get_drv()
-    reg = 0x150  # ????????
+    reg = 0x150  # MSR_OC_MAILBOX
     if method == 1:
-        inbuf = struct.pack('<II', val_HI, val_LO)
+        inbuf = struct.pack('<II', cmd, data)
         buf = DeviceIoControl(_drv, IOCTL(CPUZ_MSR_CMD), inbuf, 8, None)
-        val_HI, val_LO = struct.unpack('<II', buf)
+        status, value = struct.unpack('<II', buf)
         #if val_LO == 0 and val_HI == 0:
         #    return None
-        return (val_HI, val_LO)
+        return status, value
     xvv = msr_read(reg)
     if xvv is not None:
         msr_write(reg, val_HI, val_LO)
