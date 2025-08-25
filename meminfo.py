@@ -779,7 +779,7 @@ class WindowMemory():
             vv.MCLK_FREQ.value = round(MCLK_FREQ, 2)
         
         vv.BCLK_U.value = mem['BCLK_FREQ']
-        if msr and 'VF' in msr and 'RING' in msr['VF']:
+        if msr and 'VF' in msr and 'RING' in msr['VF'] and msr['VF']['RING']['MaxOcRatio']:
             UCLK_RATIO = msr['VF']['RING']['MaxOcRatio']
         else:
             UCLK_RATIO = mem['SA']['UCLK_RATIO']
