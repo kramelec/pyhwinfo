@@ -282,6 +282,8 @@ def msr_read(reg):
     _drv = _get_drv()
     inbuf = struct.pack('<I', reg)
     buf = DeviceIoControl(_drv, IOCTL(CPUZ_MSR_READ), inbuf, 8, None)
+    if not buf:
+        return None
     val_LO, val_HI = struct.unpack('<II', buf)
     if val_LO == 0xFFFFFFFF and val_HI == 0xFFFFFFFF:
         return None
