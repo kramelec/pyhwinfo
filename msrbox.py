@@ -321,15 +321,6 @@ class MsrMailBox():
             self.VrIaAddress = out['VR_TOPOLOGY']['VrIaAddress']
             self.VrGtAddress = out['VR_TOPOLOGY']['VrGtAddress']
 
-        if self.VrIaAddress is None:
-            data = self._msr_pcode_mailbox(MAILBOX_VR_CMD_SVID_VR_HANDLER, MAILBOX_VR_SUBCMD_SVID_GET_STRAP_CONFIGURATION, 0)
-            if data is None:
-                log.error(f'MAILBOX_VR_CMD_SVID_VR_HANDLER({MAILBOX_VR_SUBCMD_SVID_GET_STRAP_CONFIGURATION},{0}): status = 0x{self.status:X}')
-            else:
-                out['VR_TOPOLOGY'] = self.parse_vr_topology(data)
-                self.VrIaAddress = out['VR_TOPOLOGY']['VrIaAddress']
-                self.VrGtAddress = out['VR_TOPOLOGY']['VrGtAddress']
-        
         if self.VrIaAddress is not None:
             data = self._msr_oc_mailbox(MAILBOX_OC_CMD_GET_ICCMAX, self.VrIaAddress, 0)
             if data is None:
@@ -387,11 +378,26 @@ class MsrMailBox():
                 vfi['VoltageTarget'] = None
                 vfi['VoltageOffset'] = sint_to_float(get_bits(data, 0, 21, 31), 10, 11, 4)  # S11.0.10V format
     
-        data = self._msr_pcode_mailbox(MAILBOX_VR_CMD_SVID_VR_HANDLER, MAILBOX_VR_SUBCMD_SVID_GET_VCCINAUX_IMON_IMAX, 0)
-        if data is None:
-            log.error(f'MAILBOX_VR_CMD_SVID_VR_HANDLER({MAILBOX_VR_SUBCMD_SVID_GET_VCCINAUX_IMON_IMAX},{0}): status = 0x{self.status:X}')
-        else:
-            out['VccInAux'] = data / 100.0
+        return out
+
+    def _read_vr_info(self):
+        out = { }
+        
+        if self.VrIaAddress is None:
+            data = self._msr_pcode_mailbox(MAILBOX_VR_CMD_SVID_VR_HANDLER, MAILBOX_VR_SUBCMD_SVID_GET_STRAP_CONFIGURATION, 0)
+            if data is None:
+                log.error(f'MAILBOX_VR_CMD_SVID_VR_HANDLER({MAILBOX_VR_SUBCMD_SVID_GET_STRAP_CONFIGURATION},{0}): status = 0x{self.status:X}')
+            else:
+                out['VR_TOPOLOGY'] = self.parse_vr_topology(data)
+                self.VrIaAddress = out['VR_TOPOLOGY']['VrIaAddress']
+                self.VrGtAddress = out['VR_TOPOLOGY']['VrGtAddress']
+
+        if True:
+            data = self._msr_pcode_mailbox(MAILBOX_VR_CMD_SVID_VR_HANDLER, MAILBOX_VR_SUBCMD_SVID_GET_VCCINAUX_IMON_IMAX, 0)
+            if data is None:
+                log.error(f'MAILBOX_VR_CMD_SVID_VR_HANDLER({MAILBOX_VR_SUBCMD_SVID_GET_VCCINAUX_IMON_IMAX},{0}): status = 0x{self.status:X}')
+            else:
+                out['VccInAux'] = data / 100.0
 
         if self.VrIaAddress is not None:
             VR_ADDRESS_MASK = 0xF
@@ -402,19 +408,19 @@ class MsrMailBox():
             else:
                 out['AC_loadline'] = get_bits(data, 0, 0, 15) / 100.0
                 out['DC_loadline'] = get_bits(data, 0, 16, 31) / 100.0
-        
+
         return out
     
     def read_full_info(self):
         out = { }
-        out['platform_info'] = { }
         self.platform_info = self.get_platform_info()
+        out['platform_info'] = self.platform_info
         self.acquire()
         try:
             out.update( self._read_base_info() )
+            out.update( self._read_vr_info() )
         finally:
             self.release()
-        out['platform_info'] = self.platform_info
         return out
     
     def check_mailbox_mutex(self):
