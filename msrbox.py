@@ -228,7 +228,7 @@ class MsrMailBox():
         cmd = self.make_pcode_mailbox_cmd(command, p1, p2)
         rc = msr_write(VR_MAILBOX_MSR_DATA, 0, data if data else 0)
         if not rc:
-            log.error(f'_msr_pcode_mailbox(0x{cmd:X}): cannot write MSR reg!')
+            log.error(f'_msr_pcode_mailbox(0x{cmd:X}): Cannot write MSR reg!')
             return None
         rc = msr_write(VR_MAILBOX_MSR_INTERFACE, 0, cmd)
         if not rc:
@@ -249,7 +249,8 @@ class MsrMailBox():
                 return None
             pass
         if self.status != 0:
-            log.warning(f'_msr_pcode_mailbox(0x{cmd:X}): sts = 0x{self.status:X}')
+            log.error(f'_msr_pcode_mailbox(0x{cmd:X}): status = 0x{self.status:X}')
+            return None
         return msr_read(VR_MAILBOX_MSR_DATA)
 
     def make_oc_mailbox_cmd(self, command, p1, p2):
@@ -281,7 +282,8 @@ class MsrMailBox():
                 return None
             pass
         if self.status != 0:
-            log.warning(f'_msr_oc_mailbox(0x{cmd:X}): sts = 0x{self.status:X}')
+            log.error(f'_msr_oc_mailbox(0x{cmd:X}): status = 0x{self.status:X}')
+            return None
         return val & 0xFFFFFFFF
 
     def parse_vr_topology(self, data):
