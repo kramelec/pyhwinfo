@@ -584,8 +584,8 @@ class WindowMemory():
             ( "tCPDED",  '??' ),
             ( "tXP",     '??' ),
             ( "tXPDLL",  '??' ),
-            ( "tXSDLL",  '??' ),
-            ( "tPRPDEN", ''   ),
+            ( "tPRPDEN", '??' ),
+            ( "tXSDLL",   ''   ),
             ( "RTL",     '??/??/??/??' ),
         ]
         create_col_timings(col_timings, wv = 6)
