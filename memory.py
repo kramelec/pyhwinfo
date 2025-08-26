@@ -26,6 +26,7 @@ from hardware import *
 
 cpu_fam = None
 cpu_id = None
+cpu_step = None
 MCHBAR_BASE = None
 DMIBAR_BASE = None
 gdict = { }
@@ -991,13 +992,15 @@ def get_mem_capabilities():
     cap['VDDQ_VOLTAGE_MAX'] = round(VDDQ_VOLTAGE_MAX * 5 / 1000, 3)  # VDDQ_TX Maximum VID value (granularity UNDOC !!!)
 
 def get_mem_info(with_msr = True):
-    global gdict, cpu_fam, cpu_id, MCHBAR_BASE, DMIBAR_BASE
+    global gdict, cpu_fam, cpu_id, cpu_step, MCHBAR_BASE, DMIBAR_BASE
     proc_name = GetProcessorSpecification()
     print('Processor:', proc_name)
     cpu_fam = GetProcessorFamily()
     print('Processor Family: 0x%X' % cpu_fam)
     cpu_id = GetProcessorExtendedModel() 
-    print('Processor Model ID: 0x%X' % cpu_id)    
+    print('Processor Model ID: 0x%X' % cpu_id)
+    cpu_step = GetProcessorSteppingID() 
+    print('Processor Stepping ID: 0x%X' % cpu_step)
     if cpu_fam != 6:
         raise RuntimeError(f'ERROR: Currently support only Intel processors')
 
@@ -1034,7 +1037,10 @@ def get_mem_info(with_msr = True):
     board = gdict['board'] = { }
     cpu['family'] = cpu_fam
     cpu['model_id'] = cpu_id
-    cpu['name'] = proc_name.replace('(R)', '').replace('(TM)', '')
+    cpu['stepping'] = cpu_step
+    cpu['name'] = proc_name.replace('(R)', '').replace('(TM)', '').replace('  ', ' ').strip()
+    R_SA_MC_DEVICE_ID = 0x02
+    cpu['DeviceID'] = pci_cfg_read(0, 0, 0, R_SA_MC_DEVICE_ID, '2')
 
     get_mem_capabilities()
 
