@@ -51,6 +51,12 @@ TREFIMULTIPLIER = 1000      # tREFI value defined in XMP 1.3 spec is actually in
 g_fake_cpu_id = None
 g_fake_mchbar = None
 
+SA_MC_BUS = 0
+SA_MC_DEV = 0
+SA_MC_FUN = 0
+MCHBAR_ADDR_REG = 0x48
+MCHBAR_ADDR_MASK = 0xFFFFFFFE
+
 def phymem_read(addr, size, out_decimal = False):
     import cpuidsdk64
     global g_fake_mchbar
@@ -59,6 +65,23 @@ def phymem_read(addr, size, out_decimal = False):
         data = g_fake_mchbar[pos:pos+size]
         return int.from_bytes(data, 'little') if out_decimal else data
     return cpuidsdk64.phymem_read(addr, size, out_decimal)
+
+def MrcReadCR(offset, size = 4):
+    if size != 4 and size != 8:
+        raise NotImplementedError()
+    val = phymem_pc_read64(0, 0, 0, MCHBAR_ADDR_REG, MCHBAR_ADDR_MASK, offset)
+    if val is None:
+        return None
+    if size == 4:
+        return val & 0xFFFFFFFF
+    return val
+
+def MrcWriteCR(offset, value):
+    rc = phymem_pc_write32(0, 0, 0, MCHBAR_ADDR_REG, MCHBAR_ADDR_MASK, offset, value & 0xFFFFFFFF)
+    if not rc:
+        print(f'ERROR: MrcWriteCR(0x{offset:X}): cannot write data to MCHBAR!')
+        return False
+    return True
 
 def get_mchbar_info(info, controller, channel):
     global gdict, cpu_id, MCHBAR_BASE 
@@ -290,7 +313,7 @@ def get_mchbar_info(info, controller, channel):
     return tm
     
 def get_undoc_params(tm, info, controller, channel):
-    global gdict, cpu_id
+    global gdict, cpu_id, cpu_step
     mem = gdict['memory']
     mem_speed = 0
     if cpu_id in i12_FAM:
@@ -398,6 +421,62 @@ def get_undoc_params(tm, info, controller, channel):
         tm['tWR'] -= 1
     else:
         raise RuntimeError()
+
+    VccDD2 = None
+    if True:
+        DDRPHY_COMP_CR_DLLCOMP_VDLLCTRL_REG = 0x2C54
+        data = MrcReadCR(DDRPHY_COMP_CR_DLLCOMP_VDLLCTRL_REG)   # struct DDRPHY_COMP_CR_DLLCOMP_VDLLCTRL_STRUCT
+        vdll = { }
+        vdll['dllcomp_cmn_vdlltargdaccode'] = get_bits(data, 0, 0, 7)
+        vdll['dllcomp_cmn_vdlllodaccode'] = get_bits(data, 0, 8, 15)
+        vdll['dllcomp_cmn_vdllhidaccode'] = get_bits(data, 0, 16, 23)
+        vdll['vdllcomprxrstb'] = get_bits(data, 0, 24)
+        vdll['vdllcompareen'] = get_bits(data, 0, 25)
+        vdll['bonus6'] = get_bits(data, 0, 26, 31)
+        VccDD2 = round(256 * 0.45 / vdll['dllcomp_cmn_vdlllodaccode'], 3)  # ref: ICÈ_TÈA_BIOS  func: MrcPhyInitCompStaticCompInit
+
+        DDRPHY_COMP_CR_COMPDLLWL_REG = 0x2C80
+        data = MrcReadCR(DDRPHY_COMP_CR_COMPDLLWL_REG)   # struct DDRPHY_COMP_CR_COMPDLLWL_STRUCT
+        vctldaccode = get_bits(data, 0, 1, 9)
+        # ref: vctldaccode = (((DataRate > f5200) ? 750 : 650) * 4 * 512) / Inputs->VccIomV / 5;    # func: MrcPhyInitCompStaticCompInit
+        mult = 750 if mem_speed > 5260 else 650
+        mem['VccIO'] = round( (mult * 4 * 512) / (vctldaccode * 5 * 1000), 3)
+
+        DDRPHY_COMP_NEW_CR_VSSHICOMP_CTRL3_REG = 0x3CA4
+        data = MrcReadCR(DDRPHY_COMP_NEW_CR_VSSHICOMP_CTRL3_REG)   # struct DDRPHY_COMP_NEW_CR_VSSHICOMP_CTRL3_STRUCT
+        vsshicompcr_clkvrefcode = get_bits(data, 0, 0, 7)
+        # ref: vsshicompcr_clkvrefcode = (192 * min(0.3,(param.VCCDD2 - param.VCCIO)) / param.VCCDD2)   # func: MrcPhyInitSeq1
+        mem['VccIO_alt'] = round( (1 - vsshicompcr_clkvrefcode / 192) * VccDD2, 3)
+
+        mem['VccDD2'] = VccDD2
+
+    if cpu_id in [ INTEL_ALDERLAKE ] and cpu_step in [ 0, 1 ]:
+        # Q0Regs = FALSE   for ADL with stepping A0 or B0
+        pass
+    elif VccDD2: # only for Q0Regs = TRUE
+        DDRPHY_COMP_CR_VCCDDQLDO_DVFSCOMP_CTRL0_REG = 0x2C30
+        data = MrcReadCR(DDRPHY_COMP_CR_VCCDDQLDO_DVFSCOMP_CTRL0_REG)   # struct DDRPHY_COMP_CR_VCCDDQLDO_DVFSCOMP_CTRL0_STRUCT
+        vddq = { }
+        vddq['vccddq_lvrcoderes1'] = get_bits(data, 0, 0, 3)
+        vddq['vccddq_lvrcoderes2'] = get_bits(data, 0, 4, 7)
+        vddq['rxdqscomp_cmn_rxvcdlcben'] = get_bits(data, 0, 8, 9)
+        vddq['vccddq_lvrcodelvrleg'] = get_bits(data, 0, 10, 13)
+        vddq['vccddq_lvrtargetcode'] = get_bits(data, 0, 14, 19)   # 6 bits (0...63)
+        vddq['vccddq_lvrbiasvrefsel'] = get_bits(data, 0, 20, 22)
+        vddq['vccddq_lvrbypass'] = get_bits(data, 0, 23)
+        vddq['vccddq_lvrlsbypass'] = get_bits(data, 0, 24)
+        vddq['vccddq_lvrmuxtristate'] = get_bits(data, 0, 25)
+        vddq['vccddq_lvrovrden'] = get_bits(data, 0, 26)
+        vddq['periodiccomp_lvrmuxvccddqgsel'] = get_bits(data, 0, 27)
+        vddq['dvfscomp_lvrmuxvccddqgsel'] = get_bits(data, 0, 28)
+        vddq['Spare'] = get_bits(data, 0, 29, 31)
+        # ref: vccddq_lvrtargetcode = ((96 * Outputs->VccddqVoltage) / Vdd2Mv) - 26;  # func: MrcPhyInitCompStaticCompInit
+        VccddqVoltage = round((vddq['vccddq_lvrtargetcode'] + 26) * VccDD2 / 96, 3)
+        if VccddqVoltage < 0.648:
+            VccddqVoltage = round((vddq['vccddq_lvrtargetcode'] + 64 + 26) * VccDD2 / 96, 3)
+        mem['VccDDQ'] = VccddqVoltage   # IVR VDDQ TX
+
+# -----------------------------------------------------------------------------------------------------------
 
 def OdtDecode(value):
     if value == 0:
