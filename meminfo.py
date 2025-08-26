@@ -853,9 +853,10 @@ class WindowMemory():
         if mem['SA']['SA_VOLTAGE']:
             vv.SA_VOLTAGE.value = mem['SA']['SA_VOLTAGE']
         elif msr and 'VF' in msr and 'SYSTEM_AGENT' in msr['VF']:
+            VoltageTargetMode = msr['VF']['SYSTEM_AGENT']['VoltageTargetMode']
             VoltageTarget = msr['VF']['SYSTEM_AGENT']['VoltageTarget']
             VoltageOffset = msr['VF']['SYSTEM_AGENT']['VoltageOffset']
-            if VoltageTarget and VoltageTarget > 0.0:
+            if VoltageTargetMode == 'OVERRIDE':
                 vv.SA_VOLTAGE.value = round(VoltageTarget, 3)
             elif VoltageOffset < 0.0:
                 vv.SA_VOLTAGE.value = str(round(VoltageOffset, 3))
