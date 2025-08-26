@@ -713,8 +713,17 @@ class WindowMemory():
         pmic = dimm['PMIC'] if dimm and 'PMIC' in dimm else None
         
         vv.cpu_name.value = self.mem_info['cpu']['name']
+        if 'stepping' in self.mem_info['cpu']:
+            fam = self.mem_info['cpu']['family']
+            model = self.mem_info['cpu']['model_id']
+            step = self.mem_info['cpu']['stepping']
+            vv.cpu_name.value += f'  [{fam:02X}:{model:02X}:{step:02X}]'
+
         board = self.mem_info['board']
         vv.mb_name.value = board['manufacturer'] + ' ' + board['product']
+        if 'BIOS' in self.mem_info and 'MICROCODE_VER' in self.mem_info['BIOS']:
+            ver = self.mem_info['BIOS']['MICROCODE_VER']
+            vv.mb_name.value += f'  [BIOS: 0x{ver:X}]'
 
         for elem in vv.dram_model_list:
             elem.set('')
