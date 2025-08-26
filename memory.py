@@ -1045,6 +1045,7 @@ def get_mem_info(with_msr = True):
     if with_msr:
         import msrbox
         mmb = msrbox.MsrMailBox()
+        mmb.cpu_id = cpu_id
         gdict['MSR'] = mmb.read_full_info()
 
     gdict['memory'] = { }

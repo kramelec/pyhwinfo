@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import json
 
 from cpuidsdk64 import *
+from hardware import *
 from memory import *
 from smbus import *
 
@@ -17,23 +18,31 @@ from smbus import *
 LOCAL_OC_MAILBOX_MUTEX_NAME  = r"Local\Access_Intel_OC_Mailbox"
 GLOBAL_OC_MAILBOX_MUTEX_NAME = r"Global\Access_Intel_OC_Mailbox"
 
-MAILBOX_TYPE_PCODE                  = 0x00000001
-MAILBOX_TYPE_OC                     = 0x00000002
-MAILBOX_TYPE_VR_MSR                 = 0x00000003
-PCODE_MAILBOX_INTERFACE_OFFSET      = 0x5DA4
-PCODE_MAILBOX_DATA_OFFSET           = 0x5DA0
+MAILBOX_TYPE_PCODE        = 1  # CPU_BIOS_MAILBOX  : MMIO MCHBAR_REG = 0x5DA4 [dw_CMD] / MCHBAR_REG = 0x5DA0 [dw_DATA]
+MAILBOX_TYPE_OC           = 2  # OC_MAILBOX        : via MSR_REG = 0x150  struct{dw_DATA,dw_CMD}
+MAILBOX_TYPE_VR_MSR       = 3  # MSR_BIOS_MAILBOX  : via MSR_REG = 0x607 [dw_CMD] / MSR_REG = 0x608 [dw_DATA]
+                               # IMC_BIOS_MAILBOX  : MMIO MCHBAR_REG = 0x5E00 {dw_CMD} / MCHBAR_REG = 0x5E04 [dw_DATA]
+                               # VCU_MAILBOX       : MMIO MCHBAR_REG = 0x6C00 {dw_CMD} / MCHBAR_REG = 0x6C04 [dw_DATA]
+
 PCU_CR_BCLK_FREQ_MCHBAR             = 0x00005F60
 
+MSR_IA32_PLATFORM_ID                = 0x00000017  # RSHIFT 50 , MASK 7
+MSR_BIOS_SIGN_ID                    = 0x0000008B  # struct MSR_BIOS_SIGN_ID_REGISTER
 MSR_PLATFORM_INFO                   = 0x000000CE 
 MSR_OC_MAILBOX                      = 0x00000150
 MSR_IA32_PERF_STATUS                = 0x00000198
+MSR_VR_CURRENT_CONFIG               = 0x00000601
 VR_MAILBOX_MSR_INTERFACE            = 0x00000607
 VR_MAILBOX_MSR_DATA                 = 0x00000608
+MSR_BIOS_MAILBOX_INTERFACE          = 0x00000607  # struct MSR_BIOS_MAILBOX_INTERFACE_REGISTER / BIOS_MAILBOX_INTERFACE_PCU_STRUCT
+MSR_BIOS_MAILBOX_DATA               = 0x00000608
+MSR_PST_CONFIG_CONTROL              = 0x00000609  # struct MSR_PST_CONFIG_CONTROL_REGISTER
 
 MAILBOX_OC_CMD_GET_OC_CAPABILITIES            = 0x01
 MAILBOX_OC_CMD_GET_PER_CORE_RATIO_LIMIT       = 0x02
 MAILBOX_OC_CMD_GET_DDR_CAPABILITIES           = 0x03
 MAILBOX_OC_CMD_GET_VR_TOPOLOGY                = 0x04
+MAILBOX_OC_CMD_GET_BCLK_FREQUENCY_CMD         = 0x05  # MAILBOX_OC_CMD_BCLK_FREQUENCY_CMD
 MAILBOX_OC_CMD_GET_FUSED_P0_RATIO_VOLTAGE     = 0x07
 MAILBOX_OC_CMD_GET_VOLTAGE_FREQUENCY          = 0x10
 MAILBOX_OC_CMD_SET_VOLTAGE_FREQUENCY          = 0x11
@@ -47,6 +56,8 @@ MAILBOX_OC_CMD_GET_AVX_RATIO_OFFSET           = 0x1A
 MAILBOX_OC_CMD_SET_AVX_RATIO_OFFSET           = 0x1B
 MAILBOX_OC_CMD_GET_AVX_VOLTAGE_GUARDBAND      = 0x20
 MAILBOX_OC_CMD_SET_AVX_VOLTAGE_GUARDBAND      = 0x21
+MAILBOX_OC_CMD_GET_BCLK_FREQ                  = 0x22  # func OcGetCpuBclkFreqCmd
+MAILBOX_OC_CMD_SET_BCLK_FREQ                  = 0x23
 MAILBOX_OC_CMD_GET_OC_TVB_CONFIG              = 0x24
 MAILBOX_OC_CMD_SET_OC_TVB_CONFIG              = 0x25 
 
@@ -54,21 +65,20 @@ MAILBOX_OC_DOMAIN_ID_DDR                = 0x00
 MAILBOX_OC_DOMAIN_ID_IA_CORE            = 0x00
 MAILBOX_OC_DOMAIN_ID_GT                 = 0x01
 MAILBOX_OC_DOMAIN_ID_RING               = 0x02
-MAILBOX_OC_DOMAIN_ID_RESERVED           = 0x03
+MAILBOX_OC_DOMAIN_ID_RESERVED           = 0x03  # UNCORE
 MAILBOX_OC_DOMAIN_ID_SYSTEM_AGENT       = 0x04
 MAILBOX_OC_DOMAIN_ID_L2_ATOM            = 0x05
 MAILBOX_OC_DOMAIN_ID_MEMORY_CONTROLLER  = 0x06
 
+SOC_BCLK        = 0x00
+CPU_BCLK        = 0x01
+PCH_BCLK        = 0x02
+
+SOC_BCLK_SELECT = 0x0
+CPU_BCLK_SELECT = 0x2
+
 CPU_OC_MAX_VF_POINTS = 0xF
 
-BIT0_MASK               = 0x1
-MAX_RATIO_MASK          = 0x000000FF
-VOLTAGE_TARGET_MASK     = 0x000FFF00
-VOLTAGE_TARGET_OFFSET   = 8
-VOLTAGE_MODE_MASK       = 0x00100000
-VOLTAGE_MODE_OFFSET     = 20
-VOLTAGE_OFFSET_MASK     = 0xFFE00000
-VOLTAGE_OFFSET_OFFSET   = 21
 QCLK_RATIO_MASK         = 0x000000FF
 MC_REF_CLK_MASK         = 0x00000100
 MC_REF_CLK_OFFSET       = 8
@@ -146,6 +156,9 @@ CPU_VR_DOMAIN_IA = 0x0
 CPU_VR_DOMAIN_GT = 0x1
 CPU_VR_DOMAIN_SA = 0x2
 
+# Min Voltage Runtime Data[7:0] , Min Voltage C8 Data[15:8]
+MAILBOX_VR_CMD_WRITE_VCCIN_MIN_VOLTAGE         = 0x59  # func: ConfigureSvidVrs 
+
 # =============================================================================
 
 def uint_to_float(value: int, fract, rnd = None) -> float:
@@ -161,7 +174,7 @@ def sint_to_float(value: int, fract, sign, rnd = None) -> float:
 
 class MsrMailBox():
     def __init__(self):
-        self.info = { }
+        self.cpu_id = None
         self.port = 0
         self.mutex = None
         self.mutex_wait_timeout = 2000
@@ -187,7 +200,7 @@ class MsrMailBox():
             val = msr_read(MSR_PLATFORM_INFO)
             if not val:
                 return out
-            out['raw_value'] = val
+            #out['raw_value'] = val
             out['MaxNonTurboLimRatio'] = get_bits(val, 0, 8, 15)
             out['SmmSaveCap'] = get_bits(val, 0, 16)
             out['RarEn'] = get_bits(val, 0, 17)
@@ -253,6 +266,13 @@ class MsrMailBox():
             return None
         return msr_read(VR_MAILBOX_MSR_DATA)
 
+    def make_oc_mailbox_cmd_OLD(self, command, p1, p2):   # ChatGPT ;-)
+        Param1 = p1 & 0xFF  # Core ID
+        Param2 = p2 & 0x1F  # Domain ID
+        Command = command & 0x3FFF
+        RunBusy = 1
+        return (RunBusy << 31) | (Command << 21) | (Param2 << 16) | Param1
+
     def make_oc_mailbox_cmd(self, command, p1, p2):
         # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # file "CpuMailboxLib.h"  struct _OC_MAILBOX_FULL 
         Param1 = p1 & 0xFF  # Core ID
@@ -263,7 +283,7 @@ class MsrMailBox():
     def _msr_oc_mailbox(self, command, p1, p2, data = None):
         self.status = 0xFFF
         cmd = self.make_oc_mailbox_cmd(command, p1, p2)
-        rc = msr_write(MSR_OC_MAILBOX, cmd, data if data else 0)
+        rc = msr_write(MSR_OC_MAILBOX, cmd, data if data else 0)  # struct{dw_DATA,dw_CMD}
         if not rc:
             log.error(f'_msr_oc_mailbox(0x{cmd:X}): cannot write MSR reg!')
             return None
@@ -330,23 +350,41 @@ class MsrMailBox():
                 out['IccMaxValue'] = get_bits(data, 0, 0, 10) * 0.25
                 out['UnlimitedIccMaxMode'] = get_bits(data, 0, 31)
 
+        data = self._msr_oc_mailbox(MAILBOX_OC_CMD_GET_BCLK_FREQUENCY_CMD, 0, 0)
+        if data is None:
+            log.error(f'MAILBOX_OC_CMD_GET_BCLK_FREQUENCY_CMD({0},{0}): status = 0x{self.status:X}')
+        else:
+            out['BCLK_FREQ'] = data / 1000.0 if data else None
+        
+        data = self._msr_oc_mailbox(MAILBOX_OC_CMD_GET_BCLK_FREQ, SOC_BCLK_SELECT, 0)
+        if data is None:
+            log.error(f'MAILBOX_OC_CMD_GET_BCLK_FREQ({SOC_BCLK_SELECT},{0}): status = 0x{self.status:X}')
+        else:
+            out['SOC_BCLK_FREQ'] = data / 1000.0 if data else None
+
+        data = self._msr_oc_mailbox(MAILBOX_OC_CMD_GET_BCLK_FREQ, CPU_BCLK_SELECT, 0)
+        if data is None:
+            log.error(f'MAILBOX_OC_CMD_GET_BCLK_FREQ({CPU_BCLK_SELECT},{0}): status = 0x{self.status:X}')
+        else:
+            out['CPU_BCLK_FREQ'] = data / 1000.0 if data else None
+
         data = self._msr_oc_mailbox(MAILBOX_OC_CMD_GET_DDR_CAPABILITIES, 0, 0)
         if data is None:
             log.error(f'MAILBOX_OC_CMD_GET_DDR_CAPABILITIES({0},{0}): status = 0x{self.status:X}')
         else:
             # struct DDR_CAPABILITIES_ITEM
             ddr = out['DDR_CAP'] = { }
-            ddr['QclkRatio'] = get_bits(data, 0, 0, 7)
-            ddr['McReferenceClk'] = 100.0 if get_bits(data, 0, 8) else 133.33
-            ddr['NumDdrChannels'] = get_bits(data, 0, 9, 14)
+            ddr['QclkRatio'] = get_bits(data, 0, 0, 7)   # QCLK_RATIO_MASK
+            ddr['McReferenceClk'] = 100.0 if get_bits(data, 0, 8) else 133.33   # MC_REF_CLK_MASK + MC_REF_CLK_OFFSET
+            ddr['NumDdrChannels'] = get_bits(data, 0, 10, 11)  # NUM_DDR_CHANNELS_MASK + NUM_DDR_CHANNELS_OFFSET
 
         # ref: Intel SDM  section: Table 2-2. IA-32 Architectural MSRs (Contd.)
         data = msr_read(MSR_IA32_PERF_STATUS)
         out['CurrentPerformanceState'] = get_bits(data, 0, 0, 15)
         # ref: https://community.intel.com/t5/Software-Tuning-Performance/MSR-PERF-STATUS-voltage-reading/m-p/1169884
         out['Core_VID'] = get_bits(data, 0, 0, 7)
-        out['Core_FID'] = get_bits(data, 0, 8, 15)
-        out['CoreVoltage'] = round(get_bits(data, 0, 32, 47) / (2**13), 4)
+        out['Core_FID'] = get_bits(data, 0, 8, 15)  # CPU Freq Ratio
+        out['CoreVoltage'] = round(get_bits(data, 0, 32, 47) / (2**13), 4)  # Vcore
 
         DomainId = MAILBOX_OC_DOMAIN_ID_IA_CORE
         data = self._msr_oc_mailbox(MAILBOX_OC_CMD_GET_OC_CAPABILITIES, DomainId, 0)
@@ -359,29 +397,73 @@ class MsrMailBox():
             out['VoltageOffsetSupported'] = get_bits(data, 0, 10)
 
         vfd = out['VF'] = { }
-        DOMAIN_list = [                     'IA_CORE',                    'RING',                    'SYSTEM_AGENT' ]
-        domain_list = [ MAILBOX_OC_DOMAIN_ID_IA_CORE, MAILBOX_OC_DOMAIN_ID_RING, MAILBOX_OC_DOMAIN_ID_SYSTEM_AGENT ]
+        DOMAIN_list = [                     'IA_CORE',                    'RING',                    'SYSTEM_AGENT',                     'UNCORE' ]
+        domain_list = [ MAILBOX_OC_DOMAIN_ID_IA_CORE, MAILBOX_OC_DOMAIN_ID_RING, MAILBOX_OC_DOMAIN_ID_SYSTEM_AGENT, MAILBOX_OC_DOMAIN_ID_RESERVED ]
         for dn, DomainId in enumerate(domain_list):
+            vfi = vfd[DOMAIN_list[dn]] = { }
             VfPointIndex = 0    # 0 ... CPU_OC_MAX_VF_POINTS
             data = self._msr_oc_mailbox(MAILBOX_OC_CMD_GET_VOLTAGE_FREQUENCY, DomainId, VfPointIndex)
             if data is None:
                 log.error(f'MAILBOX_OC_CMD_GET_VOLTAGE_FREQUENCY({DomainId},{VfPointIndex}): status = 0x{self.status:X}')
                 continue
             # struct VF_MAILBOX_COMMAND_DATA
-            vfi = vfd[DOMAIN_list[dn]] = { }
             vfi['MaxOcRatio'] = get_bits(data, 0, 0, 7)
-            VoltageTargetMode = get_bits(data, 0, 20)
-            if VoltageTargetMode:
-                vfi['VoltageTarget'] = uint_to_float(get_bits(data, 0, 8, 19), 10, 4)   # U12.2.10V format
-                vfi['VoltageOffset'] = None
-            else:
-                vfi['VoltageTarget'] = None
-                vfi['VoltageOffset'] = sint_to_float(get_bits(data, 0, 21, 31), 10, 11, 4)  # S11.0.10V format
+            vfi['VoltageTargetMode'] = 'ADAPTIVE' if get_bits(data, 0, 20) == 0 else 'OVERRIDE'
+            vfi['VoltageTarget'] = uint_to_float(get_bits(data, 0, 8,  19), 10, 4)      # U12.2.10V format
+            vfi['VoltageOffset'] = sint_to_float(get_bits(data, 0, 21, 31), 10, 11, 4)  # S11.0.10V format
     
         return out
 
+    def _read_vr_current_config(self):
+        out = { }
+        # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # func: ConfigurePl4PowerLimits
+        data = msr_read(MSR_VR_CURRENT_CONFIG)
+        if data is None:
+            log.error(f'Cannot read MSR MSR_VR_CURRENT_CONFIG')
+        else:
+            # struct MSR_VR_CURRENT_CONFIG_REGISTER
+            out['CurrentLimit'] = get_bits(data, 0, 0, 12) * 0.125 # Current limitation in 0.125 A increments. This field is locked by VR_CURRENT_CONFIG[LOCK]. When the LOCK bit is set to 1b, this field becomes Read Only.
+            out['Lock'] = get_bits(data, 0, 31)
+            out['Psi1Threshold'] = get_bits(data, 0, 32, 41)
+            out['Psi2Threshold'] = get_bits(data, 0, 42, 51)
+            out['Psi3Threshold'] = get_bits(data, 0, 52, 61)
+            out['Ps4Enable'] = get_bits(data, 0, 62)
+        return { 'PowerLimit4': out }
+
+    def make_vr_cmd_payload(self, VrId, VrCommand, VrRegAddr, Lock = 0):
+        # struct MAILBOX_VR_INTERFACE_DATA
+        return (Lock << 31) | ((VrRegAddr & 0xFF) << 16) | ((VrCommand & 0x1F) << 4) | (VrId & 0xF)
+
     def _read_vr_info(self):
         out = { }
+        if True:
+            # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # file "PeiVrFruLib.c"   func: GetVrId
+            VrRegAddr = 0x5   # Get ProtocolId
+            data = self.make_vr_cmd_payload(0, MAILBOX_VR_CMD_SVID_COMMAND_GET_REG, VrRegAddr)
+            data = self._msr_pcode_mailbox(MAILBOX_VR_CMD_VR_INTERFACE, 0, 0, data)
+            if data is None:
+                log.error(f'MAILBOX_VR_CMD_VR_INTERFACE({0},{0}): status = 0x{self.status:X}')
+            else:
+                out['VR_Protocol_ID'] = data
+                out['VR_Protocol_ID_HEX'] = f'0x{data:X}'
+
+            VrRegAddr = 0x0   # Get Vendor ID
+            data = self.make_vr_cmd_payload(0, MAILBOX_VR_CMD_SVID_COMMAND_GET_REG, VrRegAddr)
+            data = self._msr_pcode_mailbox(MAILBOX_VR_CMD_VR_INTERFACE, 0, 0, data)
+            if data is None:
+                log.error(f'MAILBOX_VR_CMD_VR_INTERFACE({0},{0}): status = 0x{self.status:X}')
+            else:
+                out['VR_Vendor_ID'] = data
+                out['VR_Vendor_ID_HEX'] = f'0x{data:X}'
+
+            VrRegAddr = 0x1   # Get ProdId
+            data = self.make_vr_cmd_payload(0, MAILBOX_VR_CMD_SVID_COMMAND_GET_REG, VrRegAddr)
+            data = self._msr_pcode_mailbox(MAILBOX_VR_CMD_VR_INTERFACE, 0, 0, data)
+            if data is None:
+                log.error(f'MAILBOX_VR_CMD_VR_INTERFACE({0},{0}): status = 0x{self.status:X}')
+            else:
+                out['VR_Product_ID'] = data
+                out['VR_Product_ID_HEX'] = f'0x{data:X}'
         
         if self.VrIaAddress is None:
             data = self._msr_pcode_mailbox(MAILBOX_VR_CMD_SVID_VR_HANDLER, MAILBOX_VR_SUBCMD_SVID_GET_STRAP_CONFIGURATION, 0)
@@ -397,19 +479,34 @@ class MsrMailBox():
             if data is None:
                 log.error(f'MAILBOX_VR_CMD_SVID_VR_HANDLER({MAILBOX_VR_SUBCMD_SVID_GET_VCCINAUX_IMON_IMAX},{0}): status = 0x{self.status:X}')
             else:
-                out['VccInAux'] = data / 100.0
+                out['VccInAuxImonIccImax'] = data / 4.0 # (1/4 Amp)  VccIn AUX IccMax Current
 
         if self.VrIaAddress is not None:
             VR_ADDRESS_MASK = 0xF
-            p2 = self.VrIaAddress & VR_ADDRESS_MASK
-            data = self._msr_pcode_mailbox(MAILBOX_VR_CMD_SVID_VR_HANDLER, MAILBOX_VR_SUBCMD_SVID_GET_ACDC_LOADLINE, p2)
+            VR_ADDR = self.VrIaAddress & VR_ADDRESS_MASK
+
+            data = self._msr_pcode_mailbox(MAILBOX_VR_CMD_SVID_VR_HANDLER, MAILBOX_VR_SUBCMD_SVID_GET_MAX_ICC, VR_ADDR)
             if data is None:
-                log.error(f'MAILBOX_VR_CMD_SVID_VR_HANDLER({MAILBOX_VR_SUBCMD_SVID_GET_ACDC_LOADLINE},{p2}): status = 0x{self.status:X}')
+                log.error(f'MAILBOX_VR_CMD_SVID_VR_HANDLER({MAILBOX_VR_SUBCMD_SVID_GET_MAX_ICC},{VR_ADDR}): status = 0x{self.status:X}')
+            else:
+                out['IccMax'] = data & 0x07FF
+
+            VR_VOLTAGE_LIMIT_MASK = 0xFFFF
+ 
+            data = self._msr_pcode_mailbox(MAILBOX_VR_CMD_SVID_VR_HANDLER, MAILBOX_VR_SUBCMD_SVID_GET_VOLTAGE_LIMIT, VR_ADDR)
+            if data is None:
+                log.error(f'MAILBOX_VR_CMD_SVID_VR_HANDLER({MAILBOX_VR_SUBCMD_SVID_GET_VOLTAGE_LIMIT},{VR_ADDR}): status = 0x{self.status:X}')
+            else:
+                out['SVID_VCC_MAX'] = uint_to_float(data & VR_VOLTAGE_LIMIT_MASK, 13, 3)  # Mailbox Voltage Limit defined as U16.3.13, Range 0-7.999V
+
+            data = self._msr_pcode_mailbox(MAILBOX_VR_CMD_SVID_VR_HANDLER, MAILBOX_VR_SUBCMD_SVID_GET_ACDC_LOADLINE, VR_ADDR)
+            if data is None:
+                log.error(f'MAILBOX_VR_CMD_SVID_VR_HANDLER({MAILBOX_VR_SUBCMD_SVID_GET_ACDC_LOADLINE},{VR_ADDR}): status = 0x{self.status:X}')
             else:
                 out['AC_loadline'] = get_bits(data, 0, 0, 15) / 100.0
                 out['DC_loadline'] = get_bits(data, 0, 16, 31) / 100.0
 
-        return out
+        return { 'VR': out }
     
     def read_full_info(self):
         out = { }
@@ -418,6 +515,7 @@ class MsrMailBox():
         self.acquire()
         try:
             out.update( self._read_base_info() )
+            out.update( self._read_vr_current_config() )
             out.update( self._read_vr_info() )
         finally:
             self.release()
@@ -450,8 +548,11 @@ class MsrMailBox():
 
 if __name__ == "__main__":
     SdkInit(None, 0)
+    cpu_id = GetProcessorExtendedModel() 
+    print('Processor Model ID: 0x%X' % cpu_id)
     log.change_log_level(log.TRACE)
     mmb = MsrMailBox()
+    mmb.cpu_id = cpu_id
     mmb.acquire()
     try:
         val = msr_read(MSR_PLATFORM_INFO)
