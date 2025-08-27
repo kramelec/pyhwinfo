@@ -639,24 +639,28 @@ def get_mrs_storage(data, tm, info, controller, channel):
     MR37 = None
     MR40 = None
     mr['MR37_offset'] = MR37
-    if cpu_id in i12_FAM:
-        mr37v = b'\x1B'  # OdtlOffWrOffsetPlus2 << 3 + OdtlOnWrOffsetMinus2 = 3 << 3 + 3
-        mr38v = b'\x1B'  # OdtlOnWrOffsetMinus2 << 3 + OdtlOffWrOffsetPlus2 = 3 << 3 + 3
-        mr39v = b'\x1B'  # OdtlOnRdOffsetMinus2 << 3 + OdtlOffRdOffsetPlus2 = 3 << 3 + 3
-        MR37 = mrs_data.rfind(mr37v + mr38v + mr39v)
-    elif cpu_id in i15_FAM:
-        MR37 = mrs_data.rfind(b'\x09\x09\x12')  # ???????
-
-    if isinstance(MR37, int) and MR37 <= 0:
-        MR37 = None
-        
-    if MR37:
-        MR40 = MR37 + 3
-        DqsOffset = get_bits(mrs_data, MR40, 0, 2)
-        mr40vhigh = get_bits(mrs_data, MR40, 3, 7)
+    pos = mrs_size - 6
+    while pos > 8:
+        mr37 = -1
+        if cpu_id in i12_FAM:
+            mr37v = b'\x1B'  # OdtlOffWrOffsetPlus2 << 3 + OdtlOnWrOffsetMinus2 = 3 << 3 + 3
+            mr38v = b'\x1B'  # OdtlOnWrOffsetMinus2 << 3 + OdtlOffWrOffsetPlus2 = 3 << 3 + 3
+            mr39v = b'\x1B'  # OdtlOnRdOffsetMinus2 << 3 + OdtlOffRdOffsetPlus2 = 3 << 3 + 3
+            mr37 = mrs_data.rfind(mr37v + mr38v + mr39v, 0, pos)
+        elif cpu_id in i15_FAM:
+            mr37 = mrs_data.rfind(b'\x09\x09\x12', 0, pos)  # ???????
+        if mr37 < 0:
+            break
+        mr40 = mr37 + 3
+        DqsOffset = get_bits(mrs_data, mr40, 0, 2)
+        mr40vhigh = get_bits(mrs_data, mr40, 3, 7)
         if mr40vhigh != 0:
-            MR37 = MR40 = None
-        mr['MR37_offset'] = MR37
+            pos = mr37 + 2
+            continue
+        MR37 = mr37
+        MR40 = mr40
+        break
+    mr['MR37_offset'] = MR37
     if MR37:
         MR34 = None
         for pos in range(MR37 - 1, MR37 - 12, -1):
