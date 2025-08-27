@@ -425,7 +425,7 @@ class WindowMemory():
         create_sens_val(sensB, '1.0V', '?????', 'V')
 
         # Mem Cotroller Settings
-        ctrl_frame = ttk.LabelFrame(main_frame, text="MC/PCH Settings", style='Section.TLabelframe')
+        ctrl_frame = ttk.LabelFrame(main_frame, text="Common Settings", style='Section.TLabelframe')
         ctrl_frame.pack(fill=tk.BOTH, expand=True, pady=5)
 
         def create_col_ctrl(elems, wn = 8, wv = 4):
@@ -455,6 +455,7 @@ class WindowMemory():
         elems = [
             ( "DDR_OVERCLOCK", '??' ),
             ( "TIMING_RUNTIME_OC", '??' ),
+            ( "POWER_LIMIT", '??' ),     # On / Off
         ]
         create_col_ctrl(elems, wn = 17)
         elems = [
@@ -463,13 +464,13 @@ class WindowMemory():
         ]
         create_col_ctrl(elems, wn = 10)
         elems = [
-            ( "SA_VOLTAGE", '@V' ),
-            ( "POWER_LIMIT", '??' ),     # On / Off
+            ( "AC_LL", '' ),
+            ( "DC_LL", '' ),
         ]
-        create_col_ctrl(elems, wn = 11, wv = 7)
+        create_col_ctrl(elems, wn = 5, wv = 6)
         elems = [
+            ( "SA_VID", '@V' ),
             ( "VDDQ_TX", '@V' ),
-            ( "VDDQ_TX", '@A' ),
         ]
         create_col_ctrl(elems, wn = 7, wv = 7)
 
@@ -650,9 +651,6 @@ class WindowMemory():
 
         col_timings = [ "X8_DEVICE" , "PullUpDrv", "PullDownDrv", ]
         create_col_timings(col_timings, wn = 11, frame = ext_timings_frame)
-
-        col_timings = [ "AC_LL" , "DC_LL" ]
-        create_col_timings(col_timings, wn = 5, wv = 6, frame = ext_timings_frame)
 
         # ODT section
         odt_frame = ttk.Frame(timings_frame)
@@ -852,19 +850,19 @@ class WindowMemory():
         vv.TIMING_RUNTIME_OC.value = 'ON' if mem['MC_TIMING_RUNTIME_OC_ENABLED'] else 'off'
         vv.BCLK_OC.value = 'ON' if cap['BCLKOCRANGE'] == 3 else 'off'
         vv.OC_ENABLED.value = 'ON' if cap['OC_ENABLED'] else 'off'
-        vv.SA_VOLTAGE.value = ''
+        vv.SA_VID.value = ''
         if mem['SA']['SA_VOLTAGE']:
-            vv.SA_VOLTAGE.value = mem['SA']['SA_VOLTAGE']
+            vv.SA_VID.value = mem['SA']['SA_VOLTAGE']
         elif msr and 'VF' in msr and 'SYSTEM_AGENT' in msr['VF']:
             VoltageTargetMode = msr['VF']['SYSTEM_AGENT']['VoltageTargetMode']
             VoltageTarget = msr['VF']['SYSTEM_AGENT']['VoltageTarget']
             VoltageOffset = msr['VF']['SYSTEM_AGENT']['VoltageOffset']
             if VoltageTargetMode == 'OVERRIDE':
-                vv.SA_VOLTAGE.value = round(VoltageTarget, 3)
+                vv.SA_VID.value = round(VoltageTarget, 3)
             elif VoltageOffset < 0.0:
-                vv.SA_VOLTAGE.value = str(round(VoltageOffset, 3))
+                vv.SA_VID.value = str(round(VoltageOffset, 3))
             elif VoltageOffset >= 0.0:
-                vv.SA_VOLTAGE.value = '+' + str(round(VoltageOffset, 3))
+                vv.SA_VID.value = '+' + str(round(VoltageOffset, 3))
         vv.POWER_LIMIT.value = ''
         if 'LIMIT2_ENABLE' in mem['POWER']:
             if mem['POWER']['LIMIT2_ENABLE'] == 0 and mem['POWER']['LIMIT1_ENABLE'] == 0:
@@ -874,9 +872,10 @@ class WindowMemory():
         
         if 'REQ_VDDQ_TX_VOLTAGE' in mem:
             vv.VDDQ_TX.value = mem['REQ_VDDQ_TX_VOLTAGE']
-            
-        if 'REQ_VDDQ_TX_ICCMAX' in mem:
-            vv.VDDQ_TX_ICCMAX.value = mem['REQ_VDDQ_TX_ICCMAX']
+
+        if msr and 'VR' in msr:
+            vv.AC_LL.value = msr['VR']['AC_loadline']
+            vv.DC_LL.value = msr['VR']['DC_loadline']
             
         for page in self.page_list:
             mc = page['mc']
@@ -965,10 +964,6 @@ class WindowMemory():
         vv.tMOD.value = ci['tMOD'] if 'tMOD' in ci else ''
         vv.X8_DEVICE.value = ci['X8_DEVICE'] if 'X8_DEVICE' in ci else ''
         
-        if 'MSR' in self.mem_info and 'VR' in self.mem_info['MSR']:
-            vv.AC_LL.value = self.mem_info['MSR']['VR']['AC_loadline']
-            vv.DC_LL.value = self.mem_info['MSR']['VR']['DC_loadline']
-
         def get_first_value(value, none_as = ''):
             if isinstance(value, list) and len(value) > 0:
                 value = value[0] if len(value) > 0 else None
