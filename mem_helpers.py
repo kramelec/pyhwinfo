@@ -1051,7 +1051,7 @@ def get_timing_validation_style(validation_result):
 def validate_timings(self, ci, MCLK_FREQ, vvb, vv):
     global m_inf
     # Get memory speed and clock period for JEDEC validation
-    memory_speed = int(vvb.mem_freq.value) if vvb.mem_freq.value and vvb.mem_freq.value != '????' else 4800
+    memory_speed = int(vvb.mem_freq.value) if vvb.mem_freq.value and '?' not in str(vvb.mem_freq.value) else 4800
     if MCLK_FREQ and MCLK_FREQ > 0:
         tck_avg_ns = 1.0 / (MCLK_FREQ * 2 * 1e6)  # Convert MHz to ns (divide by 2 for DDR)
     else:
@@ -1213,4 +1213,28 @@ def validate_timings(self, ci, MCLK_FREQ, vvb, vv):
                 tWTR_S.label.configure(style='fixV_valid.TLabel')
             else:
                 tWTR_S.label.configure(style='fixV_tight.TLabel')
+
+def validate_voltages(self, dimm, MCLK_FREQ, vv):
+    global m_inf
+    memory_speed = int(vv.mem_freq.value) if vv.mem_freq.value and '?' not in str(vv.mem_freq.value) else 4800
+    gdict = self.mem_info
+    mem = gdict['memory']
+    msr = gdict['MSR'] if 'MSR' in gdict else { }
+    
+    VDDQ_TX = getattr(vv, 'VDDQ_TX', None)
+    if VDDQ_TX:
+        ToolTip(VDDQ_TX.label, '')
+        if 'REQ_VDDQ_TX_VOLTAGE' in mem and mem['REQ_VDDQ_TX_VOLTAGE']:
+            req_VDDQ_TX = mem['REQ_VDDQ_TX_VOLTAGE']
+            if 'VccDDQ' in mem and mem['VccDDQ']:
+                real_VDDQ_TX = mem['VccDDQ']
+                if abs(real_VDDQ_TX - req_VDDQ_TX) <= 0.02:
+                    VDDQ_TX.label.configure(style = 'fixV.TLabel')
+                else:
+                    VDDQ_TX.label.configure(style = 'fixV_tight.TLabel')
+                    msg  = f'\n'
+                    msg += f'The utility read two different values ​​from the settings: \n'
+                    msg += f'  Requested value: {req_VDDQ_TX} V \n'
+                    msg += f'  Real used value: {real_VDDQ_TX} V \n'
+                    ToolTip(VDDQ_TX.label, msg)
 

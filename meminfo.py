@@ -448,7 +448,9 @@ class WindowMemory():
                 frame = ttk.Frame(col)
                 frame.pack(fill=tk.X, pady=1)
                 ttk.Label(frame, text=name, style='fixT.TLabel', width=wn, anchor=tk.W).pack(side=tk.LEFT)
-                ttk.Label(frame, textvariable=var, style='fixV.TLabel', width=wv, anchor='center').pack(side=tk.LEFT)
+                label_widget = ttk.Label(frame, textvariable=var, style='fixV.TLabel', width=wv, anchor='center')
+                label_widget.pack(side=tk.LEFT)
+                var.label = label_widget
                 if vt:
                     ttk.Label(frame, text=vt, width=len(vt)+1, style='Title.TLabel', anchor='w').pack(side=tk.LEFT)
 
@@ -870,19 +872,23 @@ class WindowMemory():
             else:
                 vv.POWER_LIMIT.value = 'ON'
         
-        if 'REQ_VDDQ_TX_VOLTAGE' in mem:
+        if 'REQ_VDDQ_TX_VOLTAGE' in mem and mem['REQ_VDDQ_TX_VOLTAGE']:
             vv.VDDQ_TX.value = mem['REQ_VDDQ_TX_VOLTAGE']
+        elif 'VccDDQ' in mem and mem['VccDDQ']:
+            vv.VDDQ_TX.value = mem['VccDDQ']
 
         if msr and 'VR' in msr:
             vv.AC_LL.value = msr['VR']['AC_loadline']
             vv.DC_LL.value = msr['VR']['DC_loadline']
-            
+        
         for page in self.page_list:
             mc = page['mc']
             ch = page['ch']
             self.update_page(slot_id, mc, ch)
             chan = mem['mc'][mc]['channels'][ch]
             validate_timings(self, chan['info'], MCLK_FREQ, vv, self.vars.page[mc][ch])
+
+        validate_voltages(self, dimm, MCLK_FREQ, vv)
         
         self.current_slot = slot_id
         
