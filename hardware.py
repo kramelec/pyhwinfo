@@ -48,7 +48,8 @@ PCI_ID_SMBUS_INTEL = {
     0x7a23: {'name': 'INTEL_RAPTOR_LAKE_S_SMBUS' },
     0x7aa3: {'name': 'INTEL_ALDER_LAKE_S_SMBUS' },
     0x7e22: {'name': 'INTEL_METEOR_LAKE_P_SMBUS' },
-    0x7f23: {'name': 'INTEL_METEOR_LAKE_PCH_S_SMBUS' },
+#   0x7f23: {'name': 'INTEL_METEOR_LAKE_PCH_S_SMBUS' },  # may be ERROR !!!
+    0x7f23: {'name': 'INTEL_ARROW_LAKE_PCH_S_SMBUS' },   # https://github.com/memtest86plus/memtest86plus/blob/2a58a7cb5310d47212fa2790ec7511bb665c005c/system/x86/i2c.c#L177
     0x8c22: {'name': 'INTEL_LYNXPOINT_SMBUS' },
     0x8ca2: {'name': 'INTEL_WILDCATPOINT_SMBUS' },
     0x8d22: {'name': 'INTEL_WELLSBURG_SMBUS' },
@@ -78,6 +79,6 @@ def getpidsmb(name):
     return None
 
 i12_SMBUS = [ getpidsmb('ALDER_LAKE_P'), getpidsmb('ALDER_LAKE_M'), getpidsmb('ALDER_LAKE_S') ]
-i14_SMBUS = [ getpidsmb('RAPTOR_LAKE_S'), getpidsmb('METEOR_LAKE_P'), getpidsmb('METEOR_LAKE_PCH_S'), getpidsmb('METEOR_LAKE_SOC_S') ]
-i15_SMBUS = [ getpidsmb('ARROW_LAKE_H') ]
+i14_SMBUS = [ getpidsmb('RAPTOR_LAKE_S'), getpidsmb('METEOR_LAKE_P'), getpidsmb('METEOR_LAKE_SOC_S') ]
+i15_SMBUS = [ getpidsmb('ARROW_LAKE_PCH_S'), getpidsmb('ARROW_LAKE_H') ]
 
