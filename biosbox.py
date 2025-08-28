@@ -146,8 +146,8 @@ class BiosMailBox():
             pass
         return data & 0xFFFFFFFF
 
-    def _read_base_info(self):
-        out = { }
+    def _get_vccio_value(self):
+        VccIO = None
         data = self._bios_pcode_mailbox(CPU_MAILBOX_BIOS_CMD_MRC_CONFIG, CPU_MAILBOX_BIOS_CMD_MRC_CONFIG_VCCIO_SUBCOMMAND, 0)
         if data is None:
             log.error(f'CPU_MAILBOX_BIOS_CMD_MRC_CONFIG({CPU_MAILBOX_BIOS_CMD_MRC_CONFIG_VCCIO_SUBCOMMAND},{0}): status = 0x{self.status:X}')
@@ -160,16 +160,29 @@ class BiosMailBox():
             ddr['bg_ctrl_lvrtargetcode_iolvr_south'] = get_bits(data, 0, 18, 23)
             ddr['bg_ctrl_phase_detector_reset_n'] = get_bits(data, 0, 24)
             ddr['spare'] = get_bits(data, 0, 25, 31)
-            out['VccIO'] = round( ( ddr['bg_ctrl_lvrtargetcode_iolvr_south'] + 115 ) / 192, 3)  # ref: func MrcDdrIoPreInit
+            VccIO = round( ( ddr['bg_ctrl_lvrtargetcode_iolvr_south'] + 115 ) / 192, 3)  # ref: func MrcDdrIoPreInit
 
-        if 'VccIO' not in out:
+        if not VccIO:
             data = self._bios_pcode_mailbox(CPU_MAILBOX_BIOS_CMD_MRC_CONFIG, CPU_MAILBOX_BIOS_CMD_MRC_CONFIG_VCCIO_READ_SUBCOMMAND, 0)
             if data is None:
                 log.error(f'CPU_MAILBOX_BIOS_CMD_MRC_CONFIG({CPU_MAILBOX_BIOS_CMD_MRC_CONFIG_VCCIO_READ_SUBCOMMAND},{0}): status = 0x{self.status:X}')
             else:
                 # struct DDRPHY_CR_MISCS_CR_AFE_BG_CTRL1
                 bg_ctrl_lvrtargetcode_iolvr_south = get_bits(data, 0, 18, 23)
-                out['VccIO'] = round( ( bg_ctrl_lvrtargetcode_iolvr_south + 115 ) / 192, 3)  # ref: func MrcDdrIoPreInit
+                VccIO = round( ( bg_ctrl_lvrtargetcode_iolvr_south + 115 ) / 192, 3)  # ref: func MrcDdrIoPreInit
+        
+        return VccIO
+        
+    def get_vccio_value(self):
+        self.acquire()
+        try:
+            return self._get_vccio_value()
+        finally:
+            self.release()        
+
+    def _read_base_info(self):
+        out = { }
+        out['VccIO'] = self._get_vccio_value()
         
         data = self._bios_pcode_mailbox(MAILBOX_OC_CMD_OC_INTERFACE, MAILBOX_OC_SUBCMD_READ_OC_MISC_CONFIG, 0)
         if data is None:

@@ -460,21 +460,33 @@ def get_undoc_params(tm, info, controller, channel):
             # dllcomp_cmn_vdlllodaccode = 256 * (0.45 / param.VCCDD2);  # ref: ICÈ_TÈA_BIOS  func: MrcPhyInitCompStaticCompInit
             VccDD2 = round(256 * 0.45 / vdll['dllcomp_cmn_vdlllodaccode'], 3)
 
-    if True:
-        DDRPHY_COMP_CR_COMPDLLWL_REG = 0x2C80
-        data = MrcReadCR(DDRPHY_COMP_CR_COMPDLLWL_REG)   # struct DDRPHY_COMP_CR_COMPDLLWL_STRUCT
-        vctldaccode = get_bits(data, 0, 1, 9)
-        # ref: vctldaccode = (((DataRate > f5200) ? 750 : 650) * 4 * 512) / Inputs->VccIomV / 5;    # func: MrcPhyInitCompStaticCompInit
-        mult = 750 if mem_speed > 5260 else 650
-        if vctldaccode:
-            mem['VccIO'] = round( (mult * 4 * 512) / (vctldaccode * 5 * 1000), 3)
+    VccIO = None
+    if not VccDD2:
+        import biosbox
+        bmb = biosbox.BiosMailBox()
+        VccIO = bmb.get_vccio_value()
+        mem['VccIO'] = VccIO
 
-    if VccDD2:
-        DDRPHY_COMP_NEW_CR_VSSHICOMP_CTRL3_REG = 0x3CA4
-        data = MrcReadCR(DDRPHY_COMP_NEW_CR_VSSHICOMP_CTRL3_REG)   # struct DDRPHY_COMP_NEW_CR_VSSHICOMP_CTRL3_STRUCT
-        vsshicompcr_clkvrefcode = get_bits(data, 0, 0, 7)
-        # ref: vsshicompcr_clkvrefcode = (192 * min(0.3,(param.VCCDD2 - param.VCCIO)) / param.VCCDD2)   # func: MrcPhyInitSeq1
-        mem['VccIO_alt'] = round( (1 - vsshicompcr_clkvrefcode / 192) * VccDD2, 3)
+    if True:
+        DDRPHY_COMP_NEW_CR_VSSHICOMP_CTRL2_REG = 0x3CA0
+        data = MrcReadCR(DDRPHY_COMP_NEW_CR_VSSHICOMP_CTRL2_REG)   # struct DDRPHY_COMP_NEW_CR_VSSHICOMP_CTRL2_STRUCT
+        new = { }
+        new['vsshicompcr_dqvrefcode']   = get_bits(data, 0, 0, 7)
+        new['vsshicompcr_cmdvrefcode']  = get_bits(data, 0, 8, 15)
+        new['vsshicompcr_rxvrefcode']   = get_bits(data, 0, 16, 23)
+        new['vsshicompcr_leakvrefcode'] = get_bits(data, 0, 24, 31)
+        if new['vsshicompcr_dqvrefcode'] > 0:
+            if new['vsshicompcr_dqvrefcode'] == new['vsshicompcr_cmdvrefcode'] == new['vsshicompcr_rxvrefcode'] == new['vsshicompcr_leakvrefcode']:
+                if VccDD2:
+                    # ref: vsshicompcr_dqvrefcode = (192 * min(0.3,(param.VCCDD2 - param.VCCIO)) / param.VCCDD2)   # func: MrcPhyInitSeq1
+                    VccIO_alt = round( (1 - new['vsshicompcr_dqvrefcode'] / 192) * VccDD2, 3)
+                    if VccIO:
+                        mem['VccIO_alt'] = VccIO_alt
+                    else:
+                        VccIO = VccIO_alt
+                        mem['VccIO'] = VccIO
+                elif VccIO:
+                    VccDD2 = round( VccIO / ( 1 - new['vsshicompcr_dqvrefcode'] / 192), 3)
 
     if VccDD2:
         mem['VccDD2'] = VccDD2
