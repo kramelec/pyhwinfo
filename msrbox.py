@@ -489,7 +489,7 @@ class MsrMailBox():
             if data is None:
                 log.error(f'MAILBOX_VR_CMD_SVID_VR_HANDLER({MAILBOX_VR_SUBCMD_SVID_GET_MAX_ICC},{VR_ADDR}): status = 0x{self.status:X}')
             else:
-                out['IccMax'] = data & 0x07FF
+                out['IccMax'] = (data & 0x07FF) * 0.25 # Amp
 
             VR_VOLTAGE_LIMIT_MASK = 0xFFFF
  
@@ -503,8 +503,11 @@ class MsrMailBox():
             if data is None:
                 log.error(f'MAILBOX_VR_CMD_SVID_VR_HANDLER({MAILBOX_VR_SUBCMD_SVID_GET_ACDC_LOADLINE},{VR_ADDR}): status = 0x{self.status:X}')
             else:
-                out['AC_loadline'] = get_bits(data, 0, 0, 15) / 100.0
-                out['DC_loadline'] = get_bits(data, 0, 16, 31) / 100.0
+                divisor = 100.0
+                if cpu_id in i15_FAM:
+                    divisor = 1024.0
+                out['AC_loadline'] = get_bits(data, 0, 0, 15) / divisor
+                out['DC_loadline'] = get_bits(data, 0, 16, 31) / divisor
 
         return { 'VR': out }
     
