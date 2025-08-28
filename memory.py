@@ -518,6 +518,7 @@ def get_undoc_params(tm, info, controller, channel):
         if QclkFrequency < 1600:   # 3200 MT/s
             QclkFrequency = (crs['vsxhiopampcr_tbias2opamp'] + 128) * 25
         mem['QclkFrequency'] = QclkFrequency
+        mem['QclkFrequency_raw'] = data
 
 # -----------------------------------------------------------------------------------------------------------
 

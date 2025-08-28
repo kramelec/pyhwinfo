@@ -375,13 +375,13 @@ class MsrMailBox():
         else:
             # struct DDR_CAPABILITIES_ITEM
             ddr = out['DDR_CAP'] = { }
+            ddr['raw'] = get_bits(data, 0, 0, 31)
             ddr['QclkRatio'] = get_bits(data, 0, 0, 7)   # QCLK_RATIO_MASK
             ddr['McReferenceClk'] = 100.0 if get_bits(data, 0, 8) else 133.33   # MC_REF_CLK_MASK + MC_REF_CLK_OFFSET
             ddr['NumDdrChannels'] = get_bits(data, 0, 10, 11)  # NUM_DDR_CHANNELS_MASK + NUM_DDR_CHANNELS_OFFSET
 
         # ref: Intel SDM  section: Table 2-2. IA-32 Architectural MSRs (Contd.)
         data = msr_read(MSR_IA32_PERF_STATUS)
-        out['CurrentPerformanceState'] = get_bits(data, 0, 0, 15)
         # ref: https://community.intel.com/t5/Software-Tuning-Performance/MSR-PERF-STATUS-voltage-reading/m-p/1169884
         out['Core_VID'] = get_bits(data, 0, 0, 7)
         out['Core_FID'] = get_bits(data, 0, 8, 15)  # CPU Freq Ratio
