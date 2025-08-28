@@ -456,7 +456,9 @@ def get_undoc_params(tm, info, controller, channel):
         vdll['vdllcomprxrstb'] = get_bits(data, 0, 24)
         vdll['vdllcompareen'] = get_bits(data, 0, 25)
         vdll['bonus6'] = get_bits(data, 0, 26, 31)
-        VccDD2 = round(256 * 0.45 / vdll['dllcomp_cmn_vdlllodaccode'], 3)  # ref: ICÈ_TÈA_BIOS  func: MrcPhyInitCompStaticCompInit
+        if vdll['dllcomp_cmn_vdlllodaccode']: 
+            # dllcomp_cmn_vdlllodaccode = 256 * (0.45 / param.VCCDD2);  # ref: ICÈ_TÈA_BIOS  func: MrcPhyInitCompStaticCompInit
+            VccDD2 = round(256 * 0.45 / vdll['dllcomp_cmn_vdlllodaccode'], 3)
 
     if True:
         DDRPHY_COMP_CR_COMPDLLWL_REG = 0x2C80
@@ -464,7 +466,8 @@ def get_undoc_params(tm, info, controller, channel):
         vctldaccode = get_bits(data, 0, 1, 9)
         # ref: vctldaccode = (((DataRate > f5200) ? 750 : 650) * 4 * 512) / Inputs->VccIomV / 5;    # func: MrcPhyInitCompStaticCompInit
         mult = 750 if mem_speed > 5260 else 650
-        mem['VccIO'] = round( (mult * 4 * 512) / (vctldaccode * 5 * 1000), 3)
+        if vctldaccode:
+            mem['VccIO'] = round( (mult * 4 * 512) / (vctldaccode * 5 * 1000), 3)
 
     if VccDD2:
         DDRPHY_COMP_NEW_CR_VSSHICOMP_CTRL3_REG = 0x3CA4
@@ -493,7 +496,7 @@ def get_undoc_params(tm, info, controller, channel):
         vddq['periodiccomp_lvrmuxvccddqgsel'] = get_bits(data, 0, 27)
         vddq['dvfscomp_lvrmuxvccddqgsel'] = get_bits(data, 0, 28)
         vddq['Spare'] = get_bits(data, 0, 29, 31)
-        # ref: vccddq_lvrtargetcode = ((96 * Outputs->VccddqVoltage) / Vdd2Mv) - 26;  # func: MrcPhyInitCompStaticCompInit
+        # vccddq_lvrtargetcode = ((96 * Outputs->VccddqVoltage) / Vdd2Mv) - 26;  # ref: ICÈ_TÈA_BIOS  func: MrcPhyInitCompStaticCompInit
         VccddqVoltage = round((vddq['vccddq_lvrtargetcode'] + 26) * VccDD2 / 96, 3)
         if VccddqVoltage < 0.648:
             VccddqVoltage = round((vddq['vccddq_lvrtargetcode'] + 64 + 26) * VccDD2 / 96, 3)
