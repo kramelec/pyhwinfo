@@ -422,6 +422,29 @@ def get_undoc_params(tm, info, controller, channel):
     else:
         raise RuntimeError()
 
+    rev_A0 = None
+    Q0Regs = None
+    if cpu_id in [ INTEL_ALDERLAKE ] and cpu_step in [ 0, 1 ]:
+        Q0Regs = False  # for ADL with stepping A0 or B0
+    
+    if True:
+        DATA_CR_DQSTXRXCTL_REG = 0x84A0
+        data = MrcReadCR(DATA_CR_DQSTXRXCTL_REG)   # struct DATA0CH0_CR_DQSTXRXCTL_STRUCT
+        dcr = { }
+        dcr['dqstx_cmn_txvttparkendqsp'] = get_bits(data, 0, 0)
+        dcr['dqstx_cmn_txdqsprnfdelay'] = get_bits(data, 0, 1, 5)
+        dcr['dqstx_cmn_txdqspfnrdelay'] = get_bits(data, 0, 6, 10)
+        dcr['dqstx_cmn_txvttparkendqsn'] = get_bits(data, 0, 11)
+        dcr['dqstx_cmn_txvsshiffstlegen'] = get_bits(data, 0, 12)
+        dcr['dqstx_cmn_txodtstatlegendqs'] = get_bits(data, 0, 13)
+        dcr['dqstx_cmn_txidlemodedrven'] = get_bits(data, 0, 14)
+        dcr['bonus_1'] = get_bits(data, 0, 15)
+        rev_A0 = True if dcr['bonus_1'] else False
+        if rev_A0:
+            Q0Regs = False
+        else:    
+            Q0Regs = False if dcr['dqstx_cmn_txdqsprnfdelay'] == 0x10 else True
+
     VccDD2 = None
     if True:
         DDRPHY_COMP_CR_DLLCOMP_VDLLCTRL_REG = 0x2C54
@@ -435,6 +458,7 @@ def get_undoc_params(tm, info, controller, channel):
         vdll['bonus6'] = get_bits(data, 0, 26, 31)
         VccDD2 = round(256 * 0.45 / vdll['dllcomp_cmn_vdlllodaccode'], 3)  # ref: ICÈ_TÈA_BIOS  func: MrcPhyInitCompStaticCompInit
 
+    if True:
         DDRPHY_COMP_CR_COMPDLLWL_REG = 0x2C80
         data = MrcReadCR(DDRPHY_COMP_CR_COMPDLLWL_REG)   # struct DDRPHY_COMP_CR_COMPDLLWL_STRUCT
         vctldaccode = get_bits(data, 0, 1, 9)
@@ -442,18 +466,17 @@ def get_undoc_params(tm, info, controller, channel):
         mult = 750 if mem_speed > 5260 else 650
         mem['VccIO'] = round( (mult * 4 * 512) / (vctldaccode * 5 * 1000), 3)
 
+    if VccDD2:
         DDRPHY_COMP_NEW_CR_VSSHICOMP_CTRL3_REG = 0x3CA4
         data = MrcReadCR(DDRPHY_COMP_NEW_CR_VSSHICOMP_CTRL3_REG)   # struct DDRPHY_COMP_NEW_CR_VSSHICOMP_CTRL3_STRUCT
         vsshicompcr_clkvrefcode = get_bits(data, 0, 0, 7)
         # ref: vsshicompcr_clkvrefcode = (192 * min(0.3,(param.VCCDD2 - param.VCCIO)) / param.VCCDD2)   # func: MrcPhyInitSeq1
         mem['VccIO_alt'] = round( (1 - vsshicompcr_clkvrefcode / 192) * VccDD2, 3)
 
+    if VccDD2:
         mem['VccDD2'] = VccDD2
 
-    if cpu_id in [ INTEL_ALDERLAKE ] and cpu_step in [ 0, 1 ]:
-        # Q0Regs = FALSE   for ADL with stepping A0 or B0
-        pass
-    elif VccDD2: # only for Q0Regs = TRUE
+    if VccDD2 and Q0Regs:
         DDRPHY_COMP_CR_VCCDDQLDO_DVFSCOMP_CTRL0_REG = 0x2C30
         data = MrcReadCR(DDRPHY_COMP_CR_VCCDDQLDO_DVFSCOMP_CTRL0_REG)   # struct DDRPHY_COMP_CR_VCCDDQLDO_DVFSCOMP_CTRL0_STRUCT
         vddq = { }
