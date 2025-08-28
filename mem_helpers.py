@@ -1228,7 +1228,7 @@ def validate_voltages(self, dimm, MCLK_FREQ, vv):
             req_VDDQ_TX = mem['REQ_VDDQ_TX_VOLTAGE']
             if 'VccDDQ' in mem and mem['VccDDQ']:
                 real_VDDQ_TX = mem['VccDDQ']
-                if abs(real_VDDQ_TX - req_VDDQ_TX) <= 0.02:
+                if abs(real_VDDQ_TX - req_VDDQ_TX) < 0.014:
                     VDDQ_TX.label.configure(style = 'fixV.TLabel')
                 else:
                     VDDQ_TX.label.configure(style = 'fixV_tight.TLabel')
