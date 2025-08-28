@@ -37,6 +37,7 @@ VR_MAILBOX_MSR_DATA                 = 0x00000608
 MSR_BIOS_MAILBOX_INTERFACE          = 0x00000607  # struct MSR_BIOS_MAILBOX_INTERFACE_REGISTER / BIOS_MAILBOX_INTERFACE_PCU_STRUCT
 MSR_BIOS_MAILBOX_DATA               = 0x00000608
 MSR_PST_CONFIG_CONTROL              = 0x00000609  # struct MSR_PST_CONFIG_CONTROL_REGISTER
+MSR_DDR_RAPL_LIMIT                  = 0x00000618
 
 MAILBOX_OC_CMD_GET_OC_CAPABILITIES            = 0x01
 MAILBOX_OC_CMD_GET_PER_CORE_RATIO_LIMIT       = 0x02
@@ -385,7 +386,21 @@ class MsrMailBox():
         out['Core_VID'] = get_bits(data, 0, 0, 7)
         out['Core_FID'] = get_bits(data, 0, 8, 15)  # CPU Freq Ratio
         out['CoreVoltage'] = round(get_bits(data, 0, 32, 47) / (2**13), 4)  # Vcore
-
+        
+        data = msr_read(MSR_DDR_RAPL_LIMIT)
+        if data is not None:
+            # struct MSR_DDR_RAPL_LIMIT_REGISTER
+            ddr = out['DDR_RAPL'] = { }
+            ddr['Limit1Power'] = get_bits(data, 0, 0, 14) * 0.125
+            ddr['Limit1Enable'] = get_bits(data, 0, 15)
+            ddr['Limit1TimeWindowY'] = get_bits(data, 0, 17, 21)
+            ddr['Limit1TimeWindowX'] = get_bits(data, 0, 22, 23)
+            ddr['Limit2Power'] = get_bits(data, 0, 32, 46) * 0.125
+            ddr['Limit2Enable'] = get_bits(data, 0, 47)
+            ddr['Limit2TimeWindowY'] = get_bits(data, 0, 49, 53)
+            ddr['Limit2TimeWindowX'] = get_bits(data, 0, 54, 55)
+            ddr['Locked'] = get_bits(data, 0, 63)
+        
         DomainId = MAILBOX_OC_DOMAIN_ID_IA_CORE
         data = self._msr_oc_mailbox(MAILBOX_OC_CMD_GET_OC_CAPABILITIES, DomainId, 0)
         if data is None:

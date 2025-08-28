@@ -871,6 +871,11 @@ class WindowMemory():
                 vv.POWER_LIMIT.value = 'off'
             else:
                 vv.POWER_LIMIT.value = 'ON'
+        elif msr and 'DDR_RAPL' in msr:
+            if msr['DDR_RAPL']['Limit2Enable'] == 0 and msr['DDR_RAPL']['Limit1Enable'] == 0:
+                vv.POWER_LIMIT.value = 'off'
+            else:
+                vv.POWER_LIMIT.value = 'ON'
         
         if 'REQ_VDDQ_TX_VOLTAGE' in mem and mem['REQ_VDDQ_TX_VOLTAGE']:
             vv.VDDQ_TX.value = mem['REQ_VDDQ_TX_VOLTAGE']
