@@ -499,6 +499,23 @@ def get_undoc_params(tm, info, controller, channel):
             VccddqVoltage = round((vddq['vccddq_lvrtargetcode'] + 64 + 26) * VccDD2 / 96, 3)
         mem['VccDDQ'] = VccddqVoltage   # IVR VDDQ TX
 
+    if True:
+        DDRPHY_COMP_CR_SCOMPCTL_REG = 0x2CFC
+        data = MrcReadCR(DDRPHY_COMP_CR_SCOMPCTL_REG)   # struct DDRPHY_COMP_CR_SCOMPCTL_STRUCT
+        crs = { }
+        crs['ctldlytapselstage'] = get_bits(data, 0, 0, 3)
+        crs['clkdlytapselstage'] = get_bits(data, 0, 4, 7)
+        crs['vsxhiopampcr_topampen2rdy'] = get_bits(data, 0, 8, 15)
+        crs['vsxhiopampcr_tbias2opamp'] = get_bits(data, 0, 16, 22)   # 7 bits (0...127)
+        crs['vsxhiopampcr_chsel'] = get_bits(data, 0, 23, 24)
+        crs['vsxhiopampcr_ch1_globalvsshibyp'] = get_bits(data, 0, 25)
+        crs['vsxhiopampcr_ch0_globalvsshibyp'] = get_bits(data, 0, 26)
+        # vsxhiopampcr_tbias2opamp = QclkFrequency / 25;    # ref: ICÈ_TÈA_BIOS  func: MrcPhyInitCompStaticCompInit
+        QclkFrequency = crs['vsxhiopampcr_tbias2opamp'] * 25
+        if QclkFrequency < 1600:   # 3200 MT/s
+            QclkFrequency = (crs['vsxhiopampcr_tbias2opamp'] + 128) * 25
+        mem['QclkFrequency'] = QclkFrequency
+
 # -----------------------------------------------------------------------------------------------------------
 
 def OdtDecode(value):
