@@ -14,6 +14,7 @@ from memory import *
 from smbus import *
 
 # ref: https://cdrdv2.intel.com/v1/dl/getContent/671200  (Intel SDM vol.1)
+# ref: https://cdrdv2-public.intel.com/858465/335592-088-sdm-vol-4.pdf  ( Intel SDM vol.4 )
 
 LOCAL_OC_MAILBOX_MUTEX_NAME  = r"Local\Access_Intel_OC_Mailbox"
 GLOBAL_OC_MAILBOX_MUTEX_NAME = r"Global\Access_Intel_OC_Mailbox"
@@ -24,6 +25,9 @@ MAILBOX_TYPE_VR_MSR       = 3  # MSR_BIOS_MAILBOX  : via MSR_REG = 0x607 [dw_CMD
                                # IMC_BIOS_MAILBOX  : MMIO MCHBAR_REG = 0x5E00 {dw_CMD} / MCHBAR_REG = 0x5E04 [dw_DATA]
                                # VCU_MAILBOX       : MMIO MCHBAR_REG = 0x6C00 {dw_CMD} / MCHBAR_REG = 0x6C04 [dw_DATA]
 
+if cpu_id is None:
+    cpu_id = get_cpu_id()
+
 PCU_CR_BCLK_FREQ_MCHBAR             = 0x00005F60
 
 MSR_IA32_PLATFORM_ID                = 0x00000017  # RSHIFT 50 , MASK 7
@@ -31,11 +35,17 @@ MSR_BIOS_SIGN_ID                    = 0x0000008B  # struct MSR_BIOS_SIGN_ID_REGI
 MSR_PLATFORM_INFO                   = 0x000000CE 
 MSR_OC_MAILBOX                      = 0x00000150
 MSR_IA32_PERF_STATUS                = 0x00000198
-MSR_VR_CURRENT_CONFIG               = 0x00000601
+
+if cpu_id in i12_FAM:
+    MSR_VR_CURRENT_CONFIG           = 0x00000601
+if cpu_id in i15_FAM:    
+    MSR_PKG_POWER_LIMIT_4           = 0x00000601
+    
 VR_MAILBOX_MSR_INTERFACE            = 0x00000607
 VR_MAILBOX_MSR_DATA                 = 0x00000608
 MSR_BIOS_MAILBOX_INTERFACE          = 0x00000607  # struct MSR_BIOS_MAILBOX_INTERFACE_REGISTER / BIOS_MAILBOX_INTERFACE_PCU_STRUCT
 MSR_BIOS_MAILBOX_DATA               = 0x00000608
+
 MSR_PST_CONFIG_CONTROL              = 0x00000609  # struct MSR_PST_CONFIG_CONTROL_REGISTER
 MSR_DDR_RAPL_LIMIT                  = 0x00000618
 
@@ -429,20 +439,29 @@ class MsrMailBox():
     
         return out
 
-    def _read_vr_current_config(self):
+    def _read_PL4_config(self):
         out = { }
-        # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # func: ConfigurePl4PowerLimits
-        data = msr_read(MSR_VR_CURRENT_CONFIG)
-        if data is None:
-            log.error(f'Cannot read MSR MSR_VR_CURRENT_CONFIG')
-        else:
-            # struct MSR_VR_CURRENT_CONFIG_REGISTER
-            out['CurrentLimit'] = get_bits(data, 0, 0, 12) * 0.125 # Current limitation in 0.125 A increments. This field is locked by VR_CURRENT_CONFIG[LOCK]. When the LOCK bit is set to 1b, this field becomes Read Only.
-            out['Lock'] = get_bits(data, 0, 31)
-            out['Psi1Threshold'] = get_bits(data, 0, 32, 41)
-            out['Psi2Threshold'] = get_bits(data, 0, 42, 51)
-            out['Psi3Threshold'] = get_bits(data, 0, 52, 61)
-            out['Ps4Enable'] = get_bits(data, 0, 62)
+        if cpu_id in i12_FAM:
+            # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # func: ConfigurePl4PowerLimits
+            data = msr_read(MSR_VR_CURRENT_CONFIG)
+            if data is None:
+                log.error(f'Cannot read MSR MSR_VR_CURRENT_CONFIG')
+            else:
+                # struct MSR_VR_CURRENT_CONFIG_REGISTER
+                out['CurrentLimit'] = get_bits(data, 0, 0, 12) * 0.125 # Current limitation in 0.125 A increments. This field is locked by VR_CURRENT_CONFIG[LOCK]. When the LOCK bit is set to 1b, this field becomes Read Only.
+                out['Lock'] = get_bits(data, 0, 31)
+                out['Psi1Threshold'] = get_bits(data, 0, 32, 41)
+                out['Psi2Threshold'] = get_bits(data, 0, 42, 51)
+                out['Psi3Threshold'] = get_bits(data, 0, 52, 61)
+                out['Ps4Enable'] = get_bits(data, 0, 62)
+        if cpu_id in i15_FAM:
+            # ref: 335592-088-sdm-vol-4.pdf  ( Intel SDM vol.4 )
+            data = msr_read(MSR_PKG_POWER_LIMIT_4)
+            if data is None:
+                log.error(f'Cannot read MSR MSR_PKG_POWER_LIMIT_4')
+            else:
+                out['CurrentLimit'] = get_bits(data, 0, 0, 15) * 0.125
+                out['Lock'] = get_bits(data, 0, 31)
         return { 'PowerLimit4': out }
 
     def make_vr_cmd_payload(self, VrId, VrCommand, VrRegAddr, Lock = 0):
@@ -533,7 +552,7 @@ class MsrMailBox():
         self.acquire()
         try:
             out.update( self._read_base_info() )
-            out.update( self._read_vr_current_config() )
+            out.update( self._read_PL4_config() )
             out.update( self._read_vr_info() )
         finally:
             self.release()
