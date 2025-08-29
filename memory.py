@@ -24,9 +24,8 @@ from hardware import *
 # DOC: 15th Generation Intel® Core™ Ultra 200S and 200HX Series Processors CFG & MEM Registers
 # ref: https://edc.intel.com/output/DownloadCrifOutput?id=510
 
-cpu_fam = None
+gcpuinfo = None
 cpu_id = None
-cpu_step = None
 MCHBAR_BASE = None
 DMIBAR_BASE = None
 gdict = { }
@@ -57,6 +56,29 @@ SA_MC_FUN = 0
 MCHBAR_ADDR_REG = 0x48
 MCHBAR_ADDR_MASK = 0xFFFFFFFE
 
+def get_cpu_id():
+    cid = GetProcessorExtendedModel()
+    return cid
+
+def get_cpu_info(with_name = False, log = False):
+    cpu = { }
+    cpu['family'] = GetProcessorFamily()
+    cpu['model_id'] = GetProcessorExtendedModel()
+    cpu['stepping'] = GetProcessorSteppingID()
+    if with_name:
+        name = GetProcessorSpecification()
+        if name is None:
+            cpu['name'] = None
+        else:
+            cpu['name'] = name.replace('(R)', '').replace('(TM)', '').replace('  ', ' ').strip()
+    if log:
+        if name in cpu:
+            print('Processor:', cpu['name'])
+        print('Processor Family: 0x%X' % cpu['family'])
+        print('Processor Model ID: 0x%X' % cpu['model_id'])
+        print('Processor Stepping ID: 0x%X' % cpu['stepping'])
+    return cpu
+
 def phymem_read(addr, size, out_decimal = False):
     import cpuidsdk64
     global g_fake_mchbar
@@ -84,7 +106,7 @@ def MrcWriteCR(offset, value):
     return True
 
 def get_mchbar_info(info, controller, channel):
-    global gdict, cpu_id, MCHBAR_BASE 
+    global gdict, gcpuinfo, cpu_id, MCHBAR_BASE 
     MCHBAR_addr = MCHBAR_BASE + (0x10000 * controller)
     tm = { }    
     if True:
@@ -313,7 +335,7 @@ def get_mchbar_info(info, controller, channel):
     return tm
     
 def get_undoc_params(tm, info, controller, channel):
-    global gdict, cpu_id, cpu_step
+    global gdict, gcpuinfo, cpu_id
     mem = gdict['memory']
     mem_speed = 0
     if cpu_id in i12_FAM:
@@ -424,7 +446,7 @@ def get_undoc_params(tm, info, controller, channel):
 
     rev_A0 = None
     Q0Regs = None
-    if cpu_id in [ INTEL_ALDERLAKE ] and cpu_step in [ 0, 1 ]:
+    if cpu_id in [ INTEL_ALDERLAKE ] and gcpuinfo['stepping'] in [ 0, 1 ]:
         Q0Regs = False  # for ADL with stepping A0 or B0
     
     if True:
@@ -964,7 +986,7 @@ def get_mrs_storage(data, tm, info, controller, channel):
     mr["SelectAllPDA"] = get_bits(mrs_data, mrs_size - 1, 0, 7)
 
 def get_mem_ctrl(ctrl_num):
-    global gdict, cpu_fam, cpu_id, MCHBAR_BASE
+    global gdict, gcpuinfo, cpu_id, MCHBAR_BASE
    
     mi = { }
     mi['controller'] = ctrl_num
@@ -1131,16 +1153,11 @@ def get_mem_capabilities():
     cap['VDDQ_VOLTAGE_MAX'] = round(VDDQ_VOLTAGE_MAX * 5 / 1000, 3)  # VDDQ_TX Maximum VID value (granularity UNDOC !!!)
 
 def get_mem_info(with_msr = True, with_bios = True):
-    global gdict, cpu_fam, cpu_id, cpu_step, MCHBAR_BASE, DMIBAR_BASE
-    proc_name = GetProcessorSpecification()
-    print('Processor:', proc_name)
-    cpu_fam = GetProcessorFamily()
-    print('Processor Family: 0x%X' % cpu_fam)
-    cpu_id = GetProcessorExtendedModel() 
-    print('Processor Model ID: 0x%X' % cpu_id)
-    cpu_step = GetProcessorSteppingID() 
-    print('Processor Stepping ID: 0x%X' % cpu_step)
-    if cpu_fam != 6:
+    global gdict, gcpuinfo, cpu_id, MCHBAR_BASE, DMIBAR_BASE
+    gcpuinfo = get_cpu_info(with_name = True, log = True)  
+    cpu_id = gcpuinfo['model_id']
+
+    if gcpuinfo['family'] != 6:
         raise RuntimeError(f'ERROR: Currently support only Intel processors')
 
     if cpu_id < INTEL_ALDERLAKE:
@@ -1172,20 +1189,16 @@ def get_mem_info(with_msr = True, with_bios = True):
     #mchbar_mmio = MCHBAR_BASE + 0x6000
 
     gdict = { }
-    cpu = gdict['cpu'] = { }
+    gdict['cpu'] = gcpuinfo.copy()
     board = gdict['board'] = { }
-    cpu['family'] = cpu_fam
-    cpu['model_id'] = cpu_id
-    cpu['stepping'] = cpu_step
-    cpu['name'] = proc_name.replace('(R)', '').replace('(TM)', '').replace('  ', ' ').strip()
     R_SA_MC_DEVICE_ID = 0x02
-    cpu['DeviceID'] = pci_cfg_read(0, 0, 0, R_SA_MC_DEVICE_ID, '2')
+    gdict['cpu']['DeviceID'] = pci_cfg_read(0, 0, 0, R_SA_MC_DEVICE_ID, '2')
 
     get_mem_capabilities()
 
     if g_fake_cpu_id:
         cpu_id = g_fake_cpu_id
-        cpu['model_id'] = cpu_id
+        gdict['cpu']['model_id'] = cpu_id
 
     if with_msr:
         import msrbox
