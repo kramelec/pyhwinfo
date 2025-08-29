@@ -1134,7 +1134,7 @@ def validate_timings(self, ci, MCLK_FREQ, vvb, vv):
     # Set values and validate against JEDEC
     for param_name, value in timing_params:
         var = getattr(vv, param_name)
-        var.value = value
+        value = var.value
         
         # Perform JEDEC validation
         if value and str(value).isdigit():
