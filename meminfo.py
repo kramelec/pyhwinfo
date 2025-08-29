@@ -526,6 +526,9 @@ class WindowMemory():
                     name = item
                 else:
                     name, value = item
+                NAME = name
+                if '=' in name:
+                    NAME, name = name.split('=')
                 var = WinVar(value)
                 setattr(vv, name, var)
                 _wn = wn
@@ -536,7 +539,7 @@ class WindowMemory():
                 if name == 'RTL':
                     _wn = 3
                     _wv = 12
-                draw_timing_label_and_value(col, name, var, _wn, _wv)
+                draw_timing_label_and_value(col, NAME, var, _wn, _wv)
 
         col_timings = [
             ( "---",    "" ),
@@ -653,6 +656,9 @@ class WindowMemory():
 
         col_timings = [ "X8_DEVICE" , "PullUpDrv", "PullDownDrv", ]
         create_col_timings(col_timings, wn = 11, frame = ext_timings_frame)
+
+        col_timings = [ "tWR=tWR_a" ]
+        create_col_timings(col_timings, wn = 3, frame = ext_timings_frame)
 
         # ODT section
         odt_frame = ttk.Frame(timings_frame)
@@ -904,6 +910,8 @@ class WindowMemory():
         vv = self.vars.page[mc_id][ch_id]
         chan = mem['mc'][mc_id]['channels'][ch_id]
         ci = chan['info']
+        mrs = ci['MRS'] if 'MRS' in ci else { }
+
         vv.tCL.value = ci['tCL']
         vv.tRCD.value = ci['tRCD']
         vv.tRCDW.value = ci['tRCDW'] if 'tRCDW' in ci else ''
@@ -922,8 +930,8 @@ class WindowMemory():
         vv.tRRD_S.value = ci['tRRD_S']
         vv.tRDPRE.value = ci['tRDPRE']
         vv.tRDPDEN.value = ci['tRDPDEN']
-        if 'MRS' in ci and 'MR6' in ci['MRS'] and ci['MRS']['MR6']['tRTP']:
-            vv.tRTP.value = ci['MRS']['MR6']['tRTP']
+        if mrs and 'MR6' in mrs and mrs['MR6']['tRTP']:
+            vv.tRTP.value = mrs['MR6']['tRTP']
         else:
             vv.tRTP.value = ci['tRTP'] if ci['tRTP'] else ''
         vv.tREFIx9.value = ci['tREFIx9']
@@ -974,6 +982,7 @@ class WindowMemory():
         vv.tZQOPER.value = ci['tZQOPER'] if 'tZQOPER' in ci else ''
         vv.tMOD.value = ci['tMOD'] if 'tMOD' in ci else ''
         vv.X8_DEVICE.value = ci['X8_DEVICE'] if 'X8_DEVICE' in ci else ''
+        vv.tWR_a.value = mrs['MR6']['WriteRecoveryTime'] if mrs and 'MR6' in mrs else ''
         
         def get_first_value(value, none_as = ''):
             if isinstance(value, list) and len(value) > 0:
@@ -1003,8 +1012,7 @@ class WindowMemory():
                 vv1.value = ''
             return True
         
-        if 'MRS' in ci and ci['MRS']:
-            mrs = ci['MRS']
+        if mrs:
             set_odt_val(mrs, 'RttWr', "Wr")
             set_odt_val(mrs, 'RttPark', "Park")
             set_odt_val(mrs, 'RttParkDqs', "ParkDqs")
