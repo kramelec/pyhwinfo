@@ -538,11 +538,8 @@ class MsrMailBox():
             if data is None:
                 log.error(f'MAILBOX_VR_CMD_SVID_VR_HANDLER({MAILBOX_VR_SUBCMD_SVID_GET_ACDC_LOADLINE},{VR_ADDR}): status = 0x{self.status:X}')
             else:
-                divisor = 100.0
-                if cpu_id in i15_FAM:
-                    divisor = 1024.0
-                out['AC_loadline'] = get_bits(data, 0, 0, 15) / divisor
-                out['DC_loadline'] = get_bits(data, 0, 16, 31) / divisor
+                out['AC_loadline'] = round(get_bits(data, 0, 0, 15)  * 1000 / (1<<20), 2)
+                out['DC_loadline'] = round(get_bits(data, 0, 16, 31) * 1000 / (1<<20), 2)
 
         return { 'VR': out }
     
