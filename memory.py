@@ -764,7 +764,9 @@ def get_mrs_storage(data, tm, info, controller, channel):
     if MR40:
         MR45 = MR40 + 1
         MR10 = MR45 + 1
-        mr["VrefDQ"] = DDR5_MR10_decode(get_bits(mrs_data, MR10, 0, 7))
+        mr["VrefDQ"] = [ ]
+        for num in range(0, 2):
+            mr["VrefDQ"].append( DDR5_MR10_decode(get_bits(mrs_data, MR10 + num, 0, 7)) )
 
     #print(json.dumps(mr, indent=4))
     #sys.exit(1)
