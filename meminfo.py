@@ -891,7 +891,7 @@ class WindowMemory():
         elif 'VccDDQ' in mem and mem['VccDDQ']:
             vv.VDDQ_TX.value = mem['VccDDQ']
 
-        if msr and 'VR' in msr:
+        if msr and 'VR' in msr and 'AC_loadline' in msr['VR']:
             vv.AC_LL.value = msr['VR']['AC_loadline']
             vv.DC_LL.value = msr['VR']['DC_loadline']
         
