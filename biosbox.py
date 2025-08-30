@@ -255,9 +255,10 @@ class BiosMailBox():
 
 
 if __name__ == "__main__":
+    import cpuinfo
     SdkInit(None, 0)
-    cpu_id = GetProcessorExtendedModel() 
-    print('Processor Model ID: 0x%X' % cpu_id)
+    cpu_id = cpuinfo.get_cpu_id()
+    print('CPU ID: 0x%X' % cpu_id)
     log.change_log_level(log.TRACE)
     bmb = BiosMailBox()
     bmb.cpu_id = cpu_id

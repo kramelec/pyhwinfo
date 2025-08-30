@@ -456,8 +456,9 @@ def get_mem_spd_info(slot, mem_info: dict, with_pmic = True):
     if cpu['family'] != 6:
         raise RuntimeError(f'ERROR: Currently support only Intel processors')
 
-    if cpu['model_id'] < INTEL_ALDERLAKE:
-        raise RuntimeError(f'ERROR: Processor model 0x{cpu["model_id"]:X} not supported')
+    cpu_id = (cpu['family'] << 8) | cpu['model_id']
+    if cpu_id < CPUID.ALDERLAKE:
+        raise RuntimeError(f'ERROR: Processor model 0x{cpu_id:X} not supported')
 
     if not g_smb:
         g_smb = MemSmb()

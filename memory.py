@@ -15,6 +15,7 @@ import enum
 
 __author__ = 'remittor'
 
+from cpuinfo import *
 from cpuidsdk64 import *
 from hardware import *
 
@@ -24,8 +25,7 @@ from hardware import *
 # DOC: 15th Generation Intel® Core™ Ultra 200S and 200HX Series Processors CFG & MEM Registers
 # ref: https://edc.intel.com/output/DownloadCrifOutput?id=510
 
-gcpuinfo = None
-cpu_id = None
+cpu_id = get_cpu_id()
 MCHBAR_BASE = None
 DMIBAR_BASE = None
 gdict = { }
@@ -56,28 +56,6 @@ SA_MC_FUN = 0
 MCHBAR_ADDR_REG = 0x48
 MCHBAR_ADDR_MASK = 0xFFFFFFFE
 
-def get_cpu_id():
-    cid = GetProcessorExtendedModel()
-    return cid
-
-def get_cpu_info(with_name = False, log = False):
-    cpu = { }
-    cpu['family'] = GetProcessorFamily()
-    cpu['model_id'] = GetProcessorExtendedModel()
-    cpu['stepping'] = GetProcessorSteppingID()
-    if with_name:
-        name = GetProcessorSpecification()
-        if name is None:
-            cpu['name'] = None
-        else:
-            cpu['name'] = name.replace('(R)', '').replace('(TM)', '').replace('  ', ' ').strip()
-    if log:
-        if name in cpu:
-            print('Processor:', cpu['name'])
-        print('Processor Family: 0x%X' % cpu['family'])
-        print('Processor Model ID: 0x%X' % cpu['model_id'])
-        print('Processor Stepping ID: 0x%X' % cpu['stepping'])
-    return cpu
 
 def phymem_read(addr, size, out_decimal = False):
     import cpuidsdk64
@@ -446,7 +424,7 @@ def get_undoc_params(tm, info, controller, channel):
 
     rev_A0 = None
     Q0Regs = None
-    if cpu_id in [ INTEL_ALDERLAKE ] and gcpuinfo['stepping'] in [ 0, 1 ]:
+    if cpu_id in [ CPUID.ALDERLAKE ] and gcpuinfo['stepping'] in [ 0, 1 ]:
         Q0Regs = False  # for ADL with stepping A0 or B0
     
     if True:
@@ -684,8 +662,7 @@ def DDR5_MR33_decode(value):
     return res
 
 def get_mrs_storage(data, tm, info, controller, channel):
-    global gdict
-    cpu_id = gdict['cpu']['model_id']
+    global gdict, cpu_id
     # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # file "MrcMcRegisterStructAdlExxx.h" + "MrcDdr5Registers.h"
     IMC_MRS_FSM_STORAGE = 0x200
     MAX_MR_GEN_FSM          = 108  # Maximum number of MRS FSM CONTROL MR Addresses that can be sent.
@@ -1154,13 +1131,13 @@ def get_mem_capabilities():
 
 def get_mem_info(with_msr = True, with_bios = True):
     global gdict, gcpuinfo, cpu_id, MCHBAR_BASE, DMIBAR_BASE
-    gcpuinfo = get_cpu_info(with_name = True, log = True)  
-    cpu_id = gcpuinfo['model_id']
+    gcpuinfo = get_cpu_info(log = True)
+    cpu_id = get_cpu_id()
 
     if gcpuinfo['family'] != 6:
         raise RuntimeError(f'ERROR: Currently support only Intel processors')
 
-    if cpu_id < INTEL_ALDERLAKE:
+    if cpu_id < CPUID.ALDERLAKE:
         raise RuntimeError(f'ERROR: Processor model 0x{cpu_id:X} not supported')
 
     MCHBAR_BASE = pci_cfg_read(0, 0, 0, 0x48, '8')
@@ -1367,6 +1344,7 @@ def dump_mchbar_to_file(offset, size, filename = None):
     return True
 
 if __name__ == "__main__":
+    get_cpu_info(log = True)
     dump_raw_mchbar = False
     if len(sys.argv) > 1:
         if sys.argv[1].lower() == 'mchbar':

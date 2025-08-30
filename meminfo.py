@@ -186,7 +186,10 @@ class WindowMemory():
         if self.mem_info:
             mem = self.mem_info['memory']
 
-        self.cpu_id = self.mem_info['cpu']['model_id'] if self.mem_info else None
+        self.cpu_id = None
+        if 'cpu' in self.mem_info and self.mem_info['cpu']:
+            self.cpu_id = (self.mem_info['cpu']['family'] << 8) | self.mem_info['cpu']['model_id']
+
         self.dimm_count = 4
 
         # Main container

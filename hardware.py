@@ -4,29 +4,35 @@ import time
 import struct
 import ctypes as ct
 import ctypes.wintypes as wintypes
-
+import enum
 
 PCI_VENDOR_ID_INTEL = 0x8086
 PCI_VENDOR_ID_AMD   = 0x7808
 
-INTEL_ALDERLAKE           = 0x97   # 12th gen
-INTEL_ALDERLAKE_L         = 0x9A   # 12th gen
-INTEL_RAPTORLAKE          = 0xB7   # 13th gen
-INTEL_RAPTORLAKE_P        = 0xBA   #
-INTEL_RAPTORLAKE_S        = 0xBF   # 14th gen
-INTEL_BARTLETTLAKE        = 0xD7   # Raptor Cove
-INTEL_METEORLAKE          = 0xAC   # Redwood Cove / Crestmont
-INTEL_METEORLAKE_L        = 0xAA   #
-INTEL_ARROWLAKE_H         = 0xC5   # Lion Cove / Skymont
-INTEL_ARROWLAKE           = 0xC6
-INTEL_ARROWLAKE_U         = 0xB5
-INTEL_LUNARLAKE_M         = 0xBD   # Lion Cove / Skymont
-INTEL_PANTHERLAKE_L       = 0xCC   # Crestmont
+class CPUID(enum.IntEnum):   # only for Intel CPU
+    def __new__(cls, value, name):
+        obj = int.__new__(cls, value)
+        obj._value_ = value
+        obj._name_ = name
+        return obj
+    ALDERLAKE           = 0x0697, 'INTEL_ALDERLAKE'      # 12th gen
+    ALDERLAKE_L         = 0x069A, 'INTEL_ALDERLAKE_L'    # 12th gen
+    RAPTORLAKE          = 0x06B7, 'INTEL_RAPTORLAKE'     # 13th gen
+    RAPTORLAKE_P        = 0x06BA, 'INTEL_RAPTORLAKE_P'   #
+    RAPTORLAKE_S        = 0x06BF, 'INTEL_RAPTORLAKE_S'   # 14th gen
+    BARTLETTLAKE        = 0x06D7, 'INTEL_BARTLETTLAKE'   # Raptor Cove
+    METEORLAKE          = 0x06AC, 'INTEL_METEORLAKE'     # Redwood Cove / Crestmont
+    METEORLAKE_L        = 0x06AA, 'INTEL_METEORLAKE_L'   #
+    ARROWLAKE_H         = 0x06C5, 'INTEL_ARROWLAKE_H'    # Lion Cove / Skymont
+    ARROWLAKE           = 0x06C6, 'INTEL_ARROWLAKE'     
+    ARROWLAKE_U         = 0x06B5, 'INTEL_ARROWLAKE_U'   
+    LUNARLAKE_M         = 0x06BD, 'INTEL_LUNARLAKE_M'    # Lion Cove / Skymont
+    PANTHERLAKE_L       = 0x06CC, 'INTEL_PANTHERLAKE_L'  # Crestmont
 
-i12_CPU = [ INTEL_ALDERLAKE, INTEL_ALDERLAKE_L ]
-i13_CPU = [ INTEL_RAPTORLAKE, INTEL_RAPTORLAKE_P ]
-i14_CPU = [ INTEL_RAPTORLAKE_S, INTEL_METEORLAKE, INTEL_METEORLAKE_L ]
-i15_CPU = [ INTEL_ARROWLAKE, INTEL_ARROWLAKE_H, INTEL_ARROWLAKE_U ]
+i12_CPU = [ CPUID.ALDERLAKE, CPUID.ALDERLAKE_L ]
+i13_CPU = [ CPUID.RAPTORLAKE, CPUID.RAPTORLAKE_P ]
+i14_CPU = [ CPUID.RAPTORLAKE_S, CPUID.METEORLAKE, CPUID.METEORLAKE_L ]
+i15_CPU = [ CPUID.ARROWLAKE, CPUID.ARROWLAKE_H, CPUID.ARROWLAKE_U ]
 
 i12_FAM = i12_CPU + i13_CPU + i14_CPU
 i15_FAM = i15_CPU

@@ -8,6 +8,7 @@ from ctypes import byref
 from types import SimpleNamespace
 import json
 
+from cpuinfo import get_cpu_id
 from cpuidsdk64 import *
 from hardware import *
 from memory import *
@@ -585,8 +586,8 @@ class MsrMailBox():
 
 if __name__ == "__main__":
     SdkInit(None, 0)
-    cpu_id = GetProcessorExtendedModel() 
-    print('Processor Model ID: 0x%X' % cpu_id)
+    cpu_id = get_cpu_id()
+    print('CPU ID: 0x%X' % cpu_id)
     log.change_log_level(log.TRACE)
     mmb = MsrMailBox()
     mmb.cpu_id = cpu_id
