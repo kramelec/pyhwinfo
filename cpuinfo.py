@@ -16,7 +16,6 @@ import enum
 __author__ = 'remittor'
 
 from cpuid import CPUID as CPUID_BASE
-from cpuidsdk64 import *
 from hardware import *
 
 gcpuid = None    # int
@@ -42,7 +41,10 @@ def get_cpu_id(full = False):
 def get_cpu_vendor():
     global g_CPUID
     eax, ebx, ecx, edx = g_CPUID(0)
-    return struct.pack("III", ebx, edx, ecx).decode("utf-8")
+    name = struct.pack("III", ebx, edx, ecx).decode("utf-8")
+    if '\x00' in name:
+        return name.split('\x00', 1)[0]
+    return name
 
 def get_cpu_name():
     global g_CPUID
@@ -58,6 +60,11 @@ def get_cpu_info(log = False):
     cpu['family'] = cpu_id >> 8
     cpu['model_id'] = cpu_id & 0xFF
     cpu['stepping'] = stepping
+    cpu['vendor'] = get_cpu_vendor()
+    if cpu['vendor'] == 'GenuineIntel':
+        cpu['vendor'] = 'INTEL'
+    if cpu['vendor'] == 'AuthenticAMD':
+        cpu['vendor'] = 'AMD'
     name = get_cpu_name()
     if not name:
         cpu['name'] = None
