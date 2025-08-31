@@ -471,8 +471,9 @@ class WindowMemory():
         elems = [
             ( "AC_LL", '' ),
             ( "DC_LL", '' ),
+            ( "IccMax", '@A' ),
         ]
-        create_col_ctrl(elems, wn = 5, wv = 6)
+        create_col_ctrl(elems, wn = 6, wv = 6)
         elems = [
             ( "SA_VID", '@V' ),
             ( "VDDQ_TX", '@V' ),
@@ -894,6 +895,9 @@ class WindowMemory():
         if msr and 'VR' in msr and 'AC_loadline' in msr['VR']:
             vv.AC_LL.value = msr['VR']['AC_loadline']
             vv.DC_LL.value = msr['VR']['DC_loadline']
+
+        if msr and 'IccMaxValue' in msr and msr['IccMaxValue']:
+            vv.IccMax.value = round(msr['IccMaxValue'], 1)
         
         for page in self.page_list:
             mc = page['mc']
