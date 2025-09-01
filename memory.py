@@ -661,116 +661,126 @@ def DDR5_MR33_decode(value):
     res['RttParkDqs'] = OdtDecode(get_bits(value, 0, 3, 5))
     return res
 
+# enum GmfCmdType
+GmfCmdMrw  = 0
+GmfCmdMpc  = 1
+GmfCmdVref = 2
+
+def FSM_decode(value):
+    # struct MC0_CH0_CR_GENERIC_MRS_FSM_CONTROL_0_STRUCT
+    res = { }
+    res['ADDRESS']        = get_bits(value, 0, 0, 7)
+    res['MRS_STOR_PTR']   = get_bits(value, 0, 8, 16)    # GENERIC_MRS_STORAGE_POINTER
+    res['COMMAND_TYPE']   = get_bits(value, 0, 22, 23)   # enum GmfCmdType
+    res['GmfTimingIndex'] = get_bits(value, 0, 24, 25)   # enum GmfTimingIndex / DelayIndex / TIMING_VALUE_POINTER
+    res['PER_DEVICE']     = get_bits(value, 0, 27)
+    res['FSP_CONTROL']    = get_bits(value, 0, 28, 29)
+    res['PER_RANK']       = get_bits(value, 0, 30)
+    res['ACTIVE']         = get_bits(value, 0, 31)
+    return res
+
 def get_mrs_storage(data, tm, info, controller, channel):
     global gdict, cpu_id
     # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # file "MrcMcRegisterStructAdlExxx.h" + "MrcDdr5Registers.h"
-    IMC_MRS_FSM_STORAGE = 0x200
+    IMC_MRS_FSM_STORAGE = 0x200    # 0xE200
+    IMC_FSM_STORAGE     = 0x600    # 0xE600
     MAX_MR_GEN_FSM          = 108  # Maximum number of MRS FSM CONTROL MR Addresses that can be sent.
     GEN_MRS_FSM_STORAGE_MAX = 60   # 60 Storage registers
     GEN_MRS_FSM_BYTE_MAX    = 240  # 60 Registers * 4 Bytes per register         
-    mrs_data = data[IMC_MRS_FSM_STORAGE:IMC_MRS_FSM_STORAGE+GEN_MRS_FSM_BYTE_MAX]
-    mrs_hex_list = [ '%02X' % get_bits(mrs_data, i, 0, 7) for i in range(0, len(mrs_data)) ]
-    tm['mrs_data'] = ''
-    tm['mrs_size'] = 0
+    
+    mrs_data_size = IMC_FSM_STORAGE - IMC_MRS_FSM_STORAGE
+    mrs_data = data[IMC_MRS_FSM_STORAGE : IMC_MRS_FSM_STORAGE + mrs_data_size]
+    mrs_list = [ get_bits(mrs_data, i, 0, 7) for i in range(0, len(mrs_data)) ]
+    
+    fsm_data_size = MAX_MR_GEN_FSM * 4
+    fsm_data = data[IMC_FSM_STORAGE : IMC_FSM_STORAGE + fsm_data_size]
+    fsm_list = [ get_bits(fsm_data, i, 0, 31) for i in range(0, len(fsm_data), 4) ]
+
+    fsm_len = 0
     mrs_size = 0
-    for pos in range(len(mrs_hex_list)-1, 0, -1):
-        if mrs_hex_list[pos] != '00':
-            mrs_size = pos + 1
-            break
-    if mrs_size > 0:
-        mrs_hex_list = mrs_hex_list[:mrs_size]
-        tm['mrs_data'] = ' '.join(mrs_hex_list)
-        tm['mrs_size'] = mrs_size
+
+    def find_MR_into_FSM(MR_num, cmd_type = GmfCmdMrw, active = None):
+        nonlocal fsm_list, fsm_len, mrs_list, mrs_size
+        for pos, val in enumerate(fsm_list):
+            if fsm_len > 0 and pos >= fsm_len:
+                break
+            fsm = FSM_decode(val)
+            if fsm["ADDRESS"] == MR_num and fsm['COMMAND_TYPE'] == cmd_type:
+                if active is None or fsm['ACTIVE'] == active:
+                    next_fsm = FSM_decode(fsm_list[pos + 1])
+                    if next_fsm['MRS_STOR_PTR'] < fsm['MRS_STOR_PTR']:
+                        fsm['size'] = None
+                    else:
+                        fsm['size'] = next_fsm['MRS_STOR_PTR'] - fsm['MRS_STOR_PTR']
+                    return fsm
+        return None
+
+    SelectAllPDA = 0x7F  # persistent value (latest MRS storage value)
+    fsm_SelectAllPDA = None
+    
+    for fsm_pos, val in enumerate(fsm_list):
+        if fsm_pos > 4 and val == 0:
+            break  # the end
+        fsm = FSM_decode(val)
+        if not fsm['ACTIVE']:
+            continue
+        if fsm['COMMAND_TYPE'] != GmfCmdMpc:
+            continue
+        #if fsm['ADDRESS'] not in [ 0, 15 ]:
+        #    continue
+        mrs_pos = fsm["MRS_STOR_PTR"]
+        if mrs_pos > 0 and mrs_pos < len(mrs_list):
+            mrs_val = mrs_list[mrs_pos]
+            if mrs_val == SelectAllPDA:
+                fsm_SelectAllPDA = fsm
+                fsm_len = fsm_pos + 1
+                mrs_size = mrs_pos + 1
+                break
+    
+    if not mrs_size:
+        mrs_size = len(mrs_list)
+        fsm_len = len(fsm_list)
+
+    mrs_hex_list = [ '%02X' % mrs_list[i] for i in range(0, mrs_size) ]
+    tm['mrs_data'] = ' '.join(mrs_hex_list)
+    tm['mrs_size'] = mrs_size
+
+    fsm_hex_list = [ '%08X' % fsm_list[i] for i in range(0, fsm_len) ]
+    tm['fsm_data'] = ' '.join(fsm_hex_list)
+    tm['fsm_len'] = fsm_len
+    
     mr = tm['MRS'] = { }
+    if not fsm_SelectAllPDA:
+        return  # unsupported format
     if mrs_size <= 0:
         return  # MRS not inited
     if mrs_size < 16:
         return  # unsupported format
-    SelectAllPDA = 0x7F  # persistent value (latest MR)
-    if mrs_hex_list[-1] != f'{SelectAllPDA:02X}':
-        return  # unsupported format
 
-    MR34 = None
-    MR37 = None
-    MR40 = None
-    mr['MR37_offset'] = MR37
-    pos = mrs_size - 6
-    while pos > 8:
-        mr37 = -1
-        if cpu_id in i12_FAM:
-            mr37v = b'\x1B'  # OdtlOffWrOffsetPlus2 << 3 + OdtlOnWrOffsetMinus2 = 3 << 3 + 3
-            mr38v = b'\x1B'  # OdtlOnWrOffsetMinus2 << 3 + OdtlOffWrOffsetPlus2 = 3 << 3 + 3
-            mr39v = b'\x1B'  # OdtlOnRdOffsetMinus2 << 3 + OdtlOffRdOffsetPlus2 = 3 << 3 + 3
-            mr37 = mrs_data.rfind(mr37v + mr38v + mr39v, 0, pos)
-        elif cpu_id in i15_FAM:
-            mr37 = mrs_data.rfind(b'\x09\x09\x12', 0, pos)  # ???????
-        if mr37 < 0:
-            break
-        mr40 = mr37 + 3
-        DqsOffset = get_bits(mrs_data, mr40, 0, 2)
-        mr40vhigh = get_bits(mrs_data, mr40, 3, 7)
-        if mr40vhigh != 0:
-            pos = mr37 + 2
-            continue
-        MR37 = mr37
-        MR40 = mr40
-        break
-    mr['MR37_offset'] = MR37
-    if MR37:
-        MR34 = None
-        for pos in range(MR37 - 1, MR37 - 12, -1):
-            if pos <= 1:
-                break
-            flag = None
-            if cpu_id in i12_FAM:
-                flag = get_bits(mrs_data, pos, 6, 7)  # check for 0xC1, 0xC3, 0x80 ....
-                if flag:
-                    MR34 = pos + 1
-                    break
-        if cpu_id in i15_FAM:
-            MR34 = MR37 - 3
-    mr['MR34_offset'] = MR34
-    if MR34:
-        if cpu_id in i15_FAM:
-            mr["RttWr"]       = OdtDecode(get_bits(mrs_data, MR34, 3, 5))
-            mr["RttPark"]     = OdtDecode(get_bits(mrs_data, MR34, 0, 2))
-            MR35 = MR34 + 1
-            mr["RttNomWr"]    = OdtDecode(get_bits(mrs_data, MR35, 0, 2))
-            mr["RttNomRd"]    = OdtDecode(get_bits(mrs_data, MR35, 3, 5))
-            MR36 = MR34 + 2
-            mr["RttLoopback"] = OdtDecode(get_bits(mrs_data, MR36, 0, 2))
-        elif cpu_id in i12_FAM:
-            xv = MR37 - MR34 - 1
-            if xv >= 2 and (xv % 2) == 0:
-                km = xv // 2
-                MR35 = MR34 + km
-                MR36 = MR35 + km
-                mr["RttWr"] = [ ]
-                mr["RttPark"] = [ ]
-                mr["RttNomWr"] = [ ]
-                mr["RttNomRd"] = [ ]
-                for k in range(0, km):
-                    mr["RttWr"].append   ( OdtDecode(get_bits(mrs_data, MR34 + k, 3, 5)) )
-                    mr["RttPark"].append ( OdtDecode(get_bits(mrs_data, MR34 + k, 0, 2)) )
-                    mr["RttNomWr"].append( OdtDecode(get_bits(mrs_data, MR35 + k, 0, 2)) )
-                    mr["RttNomRd"].append( OdtDecode(get_bits(mrs_data, MR35 + k, 3, 5)) )
-                    pass
-                mr["RttLoopback"] = OdtDecode(get_bits(mrs_data, MR36, 0, 2))
-                for key, val in mr.items():
-                    if isinstance(val, list) and len(val) == 1:
-                        mr[key] = val[0]
-        else:
-            pass # FIXME
-    if MR40:
-        MR45 = MR40 + 1
-        MR10 = MR45 + 1
-        mr["VrefDQ"] = [ ]
-        for num in range(0, 2):
-            mr["VrefDQ"].append( DDR5_MR10_decode(get_bits(mrs_data, MR10 + num, 0, 7)) )
+    MR34 = find_MR_into_FSM(34)
+    MR35 = find_MR_into_FSM(35)
+    if MR34 and MR35:
+        mr['MR34_offset'] = MR34['MRS_STOR_PTR']
+        size = MR34['size']
+        if size and size > 0:
+            mr["RttWr"] = [ ]
+            mr["RttPark"] = [ ]
+            mr["RttNomWr"] = [ ]
+            mr["RttNomRd"] = [ ]
+            for k in range(0, size):
+                mr["RttWr"].append   ( OdtDecode(get_bits(mrs_data, MR34['MRS_STOR_PTR'] + k, 3, 5)) )
+                mr["RttPark"].append ( OdtDecode(get_bits(mrs_data, MR34['MRS_STOR_PTR'] + k, 0, 2)) )
+                mr["RttNomWr"].append( OdtDecode(get_bits(mrs_data, MR35['MRS_STOR_PTR'] + k, 0, 2)) )
+                mr["RttNomRd"].append( OdtDecode(get_bits(mrs_data, MR35['MRS_STOR_PTR'] + k, 3, 5)) )
 
-    #print(json.dumps(mr, indent=4))
-    #sys.exit(1)
-
+    MR36 = find_MR_into_FSM(36)
+    if MR36:
+        mr["RttLoopback"] = OdtDecode(get_bits(mrs_data, MR36['MRS_STOR_PTR'], 0, 2))
+    
+    MR13 = find_MR_into_FSM(13)
+    if MR13:
+        mr['mr13'] = DDR5_MR13_decode(mrs_list[ MR13['MRS_STOR_PTR'] ])
+    
     DDR5_MPC_SET_2N_COMMAND_TIMING   = 0x08
     DDR5_MPC_SET_1N_COMMAND_TIMING   = 0x09
     
@@ -786,11 +796,11 @@ def get_mrs_storage(data, tm, info, controller, channel):
     DDR5_MPC_CFG_TDLLK_TCCD_L = 0x80  # Mask = 0x0F
     
     def rttCx_check_and_read(start, pattern):
-        nonlocal mrs_data
+        nonlocal mrs_data, mrs_list
         plen = len(pattern)
         vcount = 0
         res = { }
-        mrs = [ get_bits(mrs_data, pos, 0, 7) for pos in range(start, start + plen + 1) ]
+        mrs = [ mrs_list[pos] for pos in range(start, start + plen + 1) ]
         if len(pattern) >= len(mrs):
             return 0, res
         for pi, vname in enumerate(pattern):
@@ -849,10 +859,6 @@ def get_mrs_storage(data, tm, info, controller, channel):
                     res[name] = val
         return vcount, res
     
-    rttCx_start = 0
-    rttCx_size = 0
-    rttCx_pattern = ''
-    rttCx = None
     pattern_Cx_dict = {
         'i12_1x': [
             'mpcMR13=MR13',                      # mpcMR13
@@ -863,18 +869,10 @@ def get_mrs_storage(data, tm, info, controller, channel):
             'CKb=RttCK_B',                       # mpcMR32b0
             'CSb=RttCS_B',                       # mpcMR32b1
             'CAb=RttCA_B',                       # mpcMR33b0
-            'MR11=VrefCA',
-            'MR12=VrefCS',
+            '?',
+            '?',
             'ParkDqs=RttParkDqs',                # mpcMR33
             'Park=RttPARK',                      # mpcMR34
-            'MR0=MR0',
-            'MR2=MR2',
-            'MR4=MR4',
-            'MR5=MR5',
-            'MR6=MR6',
-            'MR8=MR8',
-            'MR13=mr13',
-            'MR14=MR14',
         ],
         'i12_2x': [
             'mpcMR13=MR13',                      # mpcMR13
@@ -885,18 +883,10 @@ def get_mrs_storage(data, tm, info, controller, channel):
             'CKb=RttCK_B#0', 'CKb=RttCK_B#1',    # mpcMR32b0
             'CSb=RttCS_B#0', 'CSb=RttCS_B#1',    # mpcMR32b1
             'CAb=RttCA_B#0', 'CAb=RttCA_B#1',    # mpcMR33b0
-            'MR11=VrefCA#0', 'MR11=VrefCA#1',
-            'MR12=VrefCS#0', 'MR12=VrefCS#1',
+            '?', '?',                            # MR11
+            '?', '?',                            # MR12
             'ParkDqs=RttParkDqs#0', 'ParkDqs=RttParkDqs#1',   # mpcMR33
             'Park=RttPARK#0', 'Park=RttPARK#1',               # mpcMR34
-            'MR0=MR0',
-            'MR2=MR2',
-            'MR4=MR4',
-            'MR5=MR5',
-            'MR6=MR6',
-            'MR8=MR8',
-            'MR13=mr13',
-            'MR14=MR14',
         ],
         'i12_4x': [
             'mpcMR13=MR13',                      # mpcMR13
@@ -907,18 +897,10 @@ def get_mrs_storage(data, tm, info, controller, channel):
             'CKb=RttCK_B#0', 'CKb=RttCK_B#1', 'CKb=RttCK_B#2', 'CKb=RttCK_B#3',
             'CSb=RttCS_B#0', 'CSb=RttCS_B#1', 'CSb=RttCS_B#2', 'CSb=RttCS_B#3',
             'CAb=RttCA_B#0', 'CAb=RttCA_B#1', 'CAb=RttCA_B#2', 'CAb=RttCA_B#3',
-            'MR11=VrefCA#0', 'MR11=VrefCA#1', 'MR11=VrefCA#2', 'MR11=VrefCA#3',
-            'MR12=VrefCS#0', 'MR12=VrefCS#1', 'MR12=VrefCS#2', 'MR12=VrefCS#3',
+            '?', '?', '?', '?',
+            '?', '?', '?', '?',
             'ParkDqs=RttParkDqs#0', 'ParkDqs=RttParkDqs#1', 'ParkDqs=RttParkDqs#2', 'ParkDqs=RttParkDqs#3',
             'Park=RttPARK#0', 'Park=RttPARK#1', 'Park=RttPARK#2', 'Park=RttPARK#3',
-            'MR0=MR0',
-            'MR2=MR2',
-            'MR4=MR4',
-            'MR5=MR5',
-            'MR6=MR6',
-            'MR8=MR8',
-            'MR13=mr13',
-            'MR14=MR14',
         ],
         'i15': [
             'mpcMR13=MR13#0', 'mpcMR13=MR13#1',  # mpcMR13
@@ -929,18 +911,10 @@ def get_mrs_storage(data, tm, info, controller, channel):
             'CKb=RttCK_B',                       # mpcMR32b0
             'CSb=RttCS_B',                       # mpcMR32b1
             'CAb=RttCA_B',                       # mpcMR33b0
-            'MR11=VrefCA',
-            'MR12=VrefCS',
+            '?',
+            '?',
             'ParkDqs=RttParkDqs',                # mpcMR33
             'Park=RttPARK',                      # mpcMR34
-            'MR0=MR0',
-            'MR2=MR2',
-            'MR4=MR4',
-            'MR5=MR5',
-            'MR6=MR6',
-            'MR8=MR8',
-            'MR13=mr13',
-            'MR14=MR14',
         ],
     }
     for pname in pattern_Cx_dict:
@@ -949,6 +923,10 @@ def get_mrs_storage(data, tm, info, controller, channel):
         if cpu_id in i15_FAM and not pname.startswith('i15') :
             pattern_Cx_dict[pname] = None
 
+    rttCx_start = 0
+    rttCx_size = 0
+    rttCx_pattern = ''
+    rttCx = None
     for pname, pattern in pattern_Cx_dict.items():
         if not pattern:
             continue
@@ -959,10 +937,39 @@ def get_mrs_storage(data, tm, info, controller, channel):
             rttCx_pattern = pname
             break
     if rttCx:
-        for key, value in rttCx.items():
-            mr[key] = value
+        mr.update( rttCx )
 
-    mr["SelectAllPDA"] = get_bits(mrs_data, mrs_size - 1, 0, 7)
+    MR11 = find_MR_into_FSM(11, GmfCmdVref)
+    if MR11 and MR11['size'] and MR11['size'] > 0:
+        mr["VrefCA"] = [ ]
+        for k in range(0, MR11['size']):
+            mr["VrefCA"].append( DDR5_MR11_decode(mrs_list[ MR11['MRS_STOR_PTR'] + k ]) )
+
+    MR12 = find_MR_into_FSM(12, GmfCmdVref)
+    if MR12 and MR12['size'] and MR12['size'] > 0:
+        mr["VrefCS"] = [ ]
+        for k in range(0, MR12['size']):
+            mr["VrefCS"].append( DDR5_MR12_decode(mrs_list[ MR12['MRS_STOR_PTR'] + k ]) )
+    
+    MR10 = find_MR_into_FSM(10)
+    if MR10 and MR10['size'] and MR10['size'] > 0:
+        mr["VrefDQ"] = [ ]
+        for k in range(0, MR10['size']):
+            mr["VrefDQ"].append( DDR5_MR10_decode(mrs_list[ MR10['MRS_STOR_PTR'] + k ]) )
+
+    for mr_num in [ 0, 2, 4, 5, 6, 8, 14 ]:
+        fsm = find_MR_into_FSM(mr_num)
+        if fsm:
+            value = mrs_list[ fsm['MRS_STOR_PTR'] ]
+            decode_func = globals()[f'DDR5_MR{mr_num}_decode']
+            val = decode_func(value)
+            mr[f'MR{mr_num}'] = val
+
+    for key, val in mr.items():
+        if isinstance(val, list) and len(val) == 1:
+            mr[key] = val[0]
+
+    mr["SelectAllPDA"] = mrs_list[ fsm_SelectAllPDA['MRS_STOR_PTR'] ]
 
 def get_mem_ctrl(ctrl_num):
     global gdict, gcpuinfo, cpu_id, MCHBAR_BASE
