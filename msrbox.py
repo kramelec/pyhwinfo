@@ -36,12 +36,8 @@ MSR_BIOS_SIGN_ID                    = 0x0000008B  # struct MSR_BIOS_SIGN_ID_REGI
 MSR_PLATFORM_INFO                   = 0x000000CE 
 MSR_OC_MAILBOX                      = 0x00000150
 MSR_IA32_PERF_STATUS                = 0x00000198
-
-if cpu_id in i12_FAM:
-    MSR_VR_CURRENT_CONFIG           = 0x00000601
-if cpu_id in i15_FAM:    
-    MSR_PKG_POWER_LIMIT_4           = 0x00000601
-    
+MSR_VR_CURRENT_CONFIG               = 0x00000601
+MSR_PKG_POWER_LIMIT_4               = 0x00000601
 VR_MAILBOX_MSR_INTERFACE            = 0x00000607
 VR_MAILBOX_MSR_DATA                 = 0x00000608
 MSR_BIOS_MAILBOX_INTERFACE          = 0x00000607  # struct MSR_BIOS_MAILBOX_INTERFACE_REGISTER / BIOS_MAILBOX_INTERFACE_PCU_STRUCT
@@ -343,15 +339,17 @@ class MsrMailBox():
         out = { }
         self.VrIaAddress = None
         self.VrGtAddress = None
+        out['VR_TOPOLOGY'] = { }
         
         # ref: ICÈ_TÈA_BIOS  (leaked BIOS sources)  # file "OverClockSetup.c"   func: InitVrIccOcStrings
         data = self._msr_oc_mailbox(MAILBOX_OC_CMD_GET_VR_TOPOLOGY, 0, 0)
         if data is None:
             log.error(f'MAILBOX_OC_CMD_GET_VR_TOPOLOGY({0},{0}): status = 0x{self.status:X}')
         else:
-            out['VR_TOPOLOGY'] = self.parse_vr_topology(data)
-            self.VrIaAddress = out['VR_TOPOLOGY']['VrIaAddress']
-            self.VrGtAddress = out['VR_TOPOLOGY']['VrGtAddress']
+            if data or cpu_id in i12_FAM:
+                out['VR_TOPOLOGY'] = self.parse_vr_topology(data)
+                self.VrIaAddress = out['VR_TOPOLOGY']['VrIaAddress']
+                self.VrGtAddress = out['VR_TOPOLOGY']['VrGtAddress']
 
         if self.VrIaAddress is not None:
             data = self._msr_oc_mailbox(MAILBOX_OC_CMD_GET_ICCMAX, self.VrIaAddress, 0)
@@ -477,7 +475,7 @@ class MsrMailBox():
             data = self.make_vr_cmd_payload(0, MAILBOX_VR_CMD_SVID_COMMAND_GET_REG, VrRegAddr)
             data = self._msr_pcode_mailbox(MAILBOX_VR_CMD_VR_INTERFACE, 0, 0, data)
             if data is None:
-                log.error(f'MAILBOX_VR_CMD_VR_INTERFACE({0},{0}): status = 0x{self.status:X}')
+                log.error(f'MAILBOX_VR_CMD_VR_INTERFACE({0},{0},{VrRegAddr}): status = 0x{self.status:X}')
             else:
                 out['VR_Protocol_ID'] = data
                 out['VR_Protocol_ID_HEX'] = f'0x{data:X}'
@@ -486,7 +484,7 @@ class MsrMailBox():
             data = self.make_vr_cmd_payload(0, MAILBOX_VR_CMD_SVID_COMMAND_GET_REG, VrRegAddr)
             data = self._msr_pcode_mailbox(MAILBOX_VR_CMD_VR_INTERFACE, 0, 0, data)
             if data is None:
-                log.error(f'MAILBOX_VR_CMD_VR_INTERFACE({0},{0}): status = 0x{self.status:X}')
+                log.error(f'MAILBOX_VR_CMD_VR_INTERFACE({0},{0},{VrRegAddr}): status = 0x{self.status:X}')
             else:
                 out['VR_Vendor_ID'] = data
                 out['VR_Vendor_ID_HEX'] = f'0x{data:X}'
@@ -495,7 +493,7 @@ class MsrMailBox():
             data = self.make_vr_cmd_payload(0, MAILBOX_VR_CMD_SVID_COMMAND_GET_REG, VrRegAddr)
             data = self._msr_pcode_mailbox(MAILBOX_VR_CMD_VR_INTERFACE, 0, 0, data)
             if data is None:
-                log.error(f'MAILBOX_VR_CMD_VR_INTERFACE({0},{0}): status = 0x{self.status:X}')
+                log.error(f'MAILBOX_VR_CMD_VR_INTERFACE({0},{0},{VrRegAddr}): status = 0x{self.status:X}')
             else:
                 out['VR_Product_ID'] = data
                 out['VR_Product_ID_HEX'] = f'0x{data:X}'
@@ -505,9 +503,10 @@ class MsrMailBox():
             if data is None:
                 log.error(f'MAILBOX_VR_CMD_SVID_VR_HANDLER({MAILBOX_VR_SUBCMD_SVID_GET_STRAP_CONFIGURATION},{0}): status = 0x{self.status:X}')
             else:
-                out['VR_TOPOLOGY'] = self.parse_vr_topology(data)
-                self.VrIaAddress = out['VR_TOPOLOGY']['VrIaAddress']
-                self.VrGtAddress = out['VR_TOPOLOGY']['VrGtAddress']
+                if data:
+                    out['VR_TOPOLOGY'] = self.parse_vr_topology(data)
+                    self.VrIaAddress = out['VR_TOPOLOGY']['VrIaAddress']
+                    self.VrGtAddress = out['VR_TOPOLOGY']['VrGtAddress']
 
         if True:
             data = self._msr_pcode_mailbox(MAILBOX_VR_CMD_SVID_VR_HANDLER, MAILBOX_VR_SUBCMD_SVID_GET_VCCINAUX_IMON_IMAX, 0)
