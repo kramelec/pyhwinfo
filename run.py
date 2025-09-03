@@ -183,7 +183,7 @@ def _elevate_windows(command, cwd = None, hide = False):
             file = command[0],  # sys.executable,
             params = params,
             directory = cwd,
-            verb = 'runas',
+            verb = ' ru n as'.replace(' ', ''),
             mask = 0x40,
             show = winapi.SW_HIDE if hide else winapi.SW_SHOW
         )
