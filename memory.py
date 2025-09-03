@@ -462,9 +462,12 @@ def get_undoc_params(tm, info, controller, channel):
 
     VccIO = None
     if not VccDD2:
-        import biosbox
-        bmb = biosbox.BiosMailBox()
-        VccIO = bmb.get_vccio_value()
+        try:
+            VccIO = gdict['MSR']['BIOS']['VccIO']
+        except KeyError:
+            import biosbox
+            bmb = biosbox.BiosMailBox()
+            VccIO = bmb.get_vccio_value()
         mem['VccIO'] = VccIO
 
     if True:
