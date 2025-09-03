@@ -116,7 +116,8 @@ class WindowMemory():
         self.mlc_dialog = None
 
     def init_screen(self):
-        ctypes.windll.user32.SetProcessDPIAware()
+        #ctypes.windll.user32.SetProcessDPIAware()
+        pass
         
     def get_screen_size(self):   
         user32 = ctypes.windll.user32
